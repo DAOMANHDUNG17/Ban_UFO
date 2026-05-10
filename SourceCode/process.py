@@ -1,31 +1,456 @@
+import math
 import random
 from sys import exit
 from var import *
-from os import remove
+import os
 
 
 def create_game(name):
     pygame.init()
+
     screen = pygame.display.set_mode((1366, 768))
     pygame.display.set_caption(name)
-    pygame.display.set_icon(pygame.image.load('../Data/image/chicken.png'))
+
+    icon_path = os.path.normpath(
+        os.path.join(os.path.dirname(save_file_path()), '..', 'image', 'chicken.png')
+    )
+    if os.path.isfile(icon_path):
+        pygame.display.set_icon(pygame.image.load(icon_path).convert_alpha())
+
     load_music(all_music()['bg'], 0.2).play(-1)
+
     return screen
 
 
-def w_file(lv_game, lv_gun, score, hp):
-    s = [str(lv_game) + '\n', str(lv_gun) + '\n', str(score) + '\n', str(hp) + '\n']
-    with open('../Data/save/save.txt', 'w') as file:
-        file.writelines(s)
+# ================= SAVE FILE =================
+
+def w_file(
+    lv_game,
+    lv_gun,
+    score,
+    hp,
+    gift_rays=0,
+    difficulty=2,
+    missiles=0,
+    skin_index=0,
+    ammo=None,
+):
+
+    if ammo is None:
+        ammo = starting_ammo(2)
+
+    path = save_file_path()
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+
+    data = [
+        f"{lv_game}\n",
+        f"{lv_gun}\n",
+        f"{score}\n",
+        f"{hp}\n",
+        f"{gift_rays}\n",
+        f"{difficulty}\n",
+        f"{missiles}\n",
+        f"{skin_index}\n",
+        f"{ammo}\n",
+    ]
+
+    with open(path, 'w') as file:
+        file.writelines(data)
 
 
 def r_file():
+
+    path = save_file_path()
+
+    if not os.path.exists(path):
+        w_file(1, 1, 0, 5, 0, 2, 0, 0, starting_ammo(2))
+        return [1, 1, 0, 5, 0, 2, 0, 0, starting_ammo(2)]
+
     x = []
-    with open('../Data/save/save.txt') as file:
+
+    with open(path) as file:
+
         for line in file:
-            x.append(int(line.strip()))
+
+            line = line.strip()
+
+            if line != '':
+                x.append(int(line))
+
+    if len(x) == 4:
+        x.extend([0, 2, 0, 0, starting_ammo(2)])
+        w_file(x[0], x[1], x[2], x[3], x[4], x[5], x[6], x[7], x[8])
+    elif len(x) == 6:
+        x.extend([0, 0, starting_ammo(2)])
+        w_file(x[0], x[1], x[2], x[3], x[4], x[5], x[6], x[7], x[8])
+    elif len(x) == 8:
+        x.append(starting_ammo(x[5] if x[5] in (1, 2, 3) else 2))
+        w_file(x[0], x[1], x[2], x[3], x[4], x[5], x[6], x[7], x[8])
+    elif len(x) != 9:
+        w_file(1, 1, 0, 5, 0, 2, 0, 0, starting_ammo(2))
+        return [1, 1, 0, 5, 0, 2, 0, 0, starting_ammo(2)]
+
     return x
 
+
+# ================= HIGH SCORES =================
+
+
+def read_highscores():
+
+    path = highscores_file_path()
+
+    if not os.path.isfile(path):
+        return []
+
+    scores = []
+
+    with open(path) as file:
+
+        for line in file:
+
+            line = line.strip()
+
+            if line.isdigit():
+                scores.append(int(line))
+
+    return scores
+
+
+def write_highscores(scores):
+
+    path = highscores_file_path()
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+
+    with open(path, 'w') as file:
+
+        for s in scores:
+            file.write(f"{s}\n")
+
+
+def record_high_score(score):
+
+    scores = read_highscores()
+    scores.append(score)
+    scores = sorted(scores, reverse=True)[:10]
+    write_highscores(scores)
+
+
+def highscores_menu(screen):
+
+    bg = get_img('bg')
+    fps = pygame.time.Clock()
+
+    while True:
+
+        fps.tick(30)
+
+        screen.blit(bg, (0, 0))
+
+        scores = read_highscores()
+
+        screen.blit(text('HIGH SCORES', 100, 'Red'), (450, 80))
+
+        y = 220
+
+        for i, s in enumerate(scores[:10]):
+
+            screen.blit(text(f'{i + 1}. {s}', 45, 'Yellow'), (520, y))
+
+            y += 45
+
+        if not scores:
+
+            screen.blit(text('No scores yet', 40, 'Gray'), (520, 280))
+
+        screen.blit(
+            text('Press ENTER or ESC to return', 35, 'White'),
+            (480, 680),
+        )
+
+        pygame.display.update()
+
+        for event in pygame.event.get():
+
+            if event.type == pygame.QUIT:
+                close()
+
+            elif event.type == pygame.KEYDOWN:
+
+                if event.key in (pygame.K_RETURN, pygame.K_ESCAPE):
+
+                    return
+
+
+def hangar_menu(screen):
+
+    bg = get_img('bg')
+
+    data = list(r_file())
+
+    while len(data) < 8:
+
+        data.append(0)
+
+    if len(data) < 9:
+
+        data.append(
+            starting_ammo(data[5] if data[5] in (1, 2, 3) else 2)
+        )
+
+    skin_i = data[7] if len(data) > 7 else 0
+
+    names = ship_skin_filenames()
+
+    n = len(names)
+
+    fps = pygame.time.Clock()
+
+    while True:
+
+        fps.tick(30)
+
+        screen.blit(bg, (0, 0))
+
+        screen.blit(text('HANGAR', 100, 'Red'), (530, 70))
+
+        preview = load_ship_skin(skin_i)
+
+        px = (1366 - preview.get_width()) // 2
+
+        py = 280
+
+        screen.blit(preview, (px, py))
+
+        label = names[skin_i].replace('.png', '').replace('_', ' ')
+
+        screen.blit(text(label[:28], 38, 'Yellow'), (480, 520))
+
+        screen.blit(
+            text('LEFT / RIGHT: skin | ENTER: save | ESC: back', 32, 'White'),
+            (340, 660),
+        )
+
+        pygame.display.update()
+
+        for event in pygame.event.get():
+
+            if event.type == pygame.QUIT:
+                close()
+
+            elif event.type == pygame.KEYDOWN:
+
+                if event.key == pygame.K_LEFT:
+
+                    skin_i = (skin_i - 1) % n
+
+                elif event.key == pygame.K_RIGHT:
+
+                    skin_i = (skin_i + 1) % n
+
+                elif event.key == pygame.K_RETURN:
+
+                    data = list(r_file())
+
+                    while len(data) < 9:
+
+                        pad = starting_ammo(
+                            data[5] if len(data) > 5 and data[5] in (1, 2, 3) else 2
+                        )
+
+                        data.append(pad)
+
+                    data[7] = skin_i
+
+                    w_file(
+                        data[0],
+                        data[1],
+                        data[2],
+                        data[3],
+                        data[4],
+                        data[5],
+                        data[6],
+                        data[7],
+                        data[8],
+                    )
+
+                    return
+
+                elif event.key == pygame.K_ESCAPE:
+
+                    return
+
+
+def missile_weapon_inf():
+
+    s = pygame.Surface((26, 36), pygame.SRCALPHA)
+
+    pygame.draw.polygon(s, (255, 200, 80), [(13, 0), (26, 36), (0, 36)])
+
+    pygame.draw.circle(s, (255, 90, 40), (13, 14), 6)
+
+    pygame.draw.polygon(s, (255, 240, 200), [(13, 4), (18, 14), (8, 14)])
+
+    img = s.convert_alpha()
+
+    return {
+        'img': img,
+        'rect': img.get_rect(),
+        'items': [],
+    }
+
+
+def nearest_chicken_center(mx, my, ck_inf):
+
+    if not ck_inf['pos']:
+        return None, None
+
+    cw = ck_inf['img'].get_width()
+
+    ch = ck_inf['img'].get_height()
+
+    best_d = 1e12
+
+    bx = None
+
+    by = None
+
+    for px, py in ck_inf['pos']:
+
+        cx = px + cw / 2
+
+        cy = py + ch / 2
+
+        d = (cx - mx) ** 2 + (cy - my) ** 2
+
+        if d < best_d:
+
+            best_d = d
+
+            bx, by = cx, cy
+
+    return bx, by
+
+
+def step_homing_missiles(
+    missile_inf,
+    speed,
+    boss_mode,
+    boss_hp,
+    boss_pos,
+    boss_img,
+    ck_inf,
+):
+
+    for m in missile_inf['items']:
+
+        mx, my = m['x'], m['y']
+
+        tx = ty = None
+
+        if boss_mode and boss_hp > 0 and boss_img is not None:
+
+            tx = boss_pos[0] + boss_img.get_width() / 2
+
+            ty = boss_pos[1] + boss_img.get_height() / 2
+
+        else:
+
+            tx, ty = nearest_chicken_center(mx, my, ck_inf)
+
+            if tx is None:
+
+                tx = mx
+
+                ty = my - 260
+
+        dx = tx - mx
+
+        dy = ty - my
+
+        dist = math.hypot(dx, dy)
+
+        if dist < 1e-6:
+
+            continue
+
+        m['x'] += dx / dist * speed
+
+        m['y'] += dy / dist * speed
+
+
+def draw_hit_bursts(screen, bursts):
+
+    for b in bursts[:]:
+
+        bx, by = b['pos']
+
+        t = b['ttl']
+
+        rad = 10 + (22 - t)
+
+        pygame.draw.circle(
+            screen,
+            (255, 220, 120),
+            (int(bx), int(by)),
+            min(rad, 48),
+            2,
+        )
+
+        pygame.draw.circle(
+            screen,
+            (255, 140, 60),
+            (int(bx), int(by)),
+            min(rad // 2 + 4, 36),
+        )
+
+        b['ttl'] -= 1
+
+        if b['ttl'] <= 0:
+
+            bursts.remove(b)
+
+
+def cull_missiles(missile_inf, max_sz):
+
+    missile_inf['items'] = [
+
+        m for m in missile_inf['items']
+
+        if -60 <= m['x'] <= max_sz[0] + 60
+
+        and -80 <= m['y'] <= max_sz[1] + 60
+
+    ]
+
+
+def use_boss_fight(lv_game, difficulty):
+
+    if difficulty == 3:
+
+        return True
+
+    return lv_game > 0 and lv_game % 5 == 0
+
+
+def roll_chicken_drop(gifts_spawned):
+
+    r = random.random()
+
+    if gifts_spawned < MAX_GIFTS_PER_STAGE and r < GIFT_DROP_RATE:
+
+        return 'gift'
+
+    r2 = random.random()
+
+    if r2 < 0.5:
+
+        return 'egg'
+
+    return 'drumstick'
+
+
+# ================= SYSTEM =================
 
 def close():
     pygame.quit()
@@ -33,19 +458,11 @@ def close():
 
 
 def load_music(path, vol):
+
     sound = pygame.mixer.Sound(path)
     sound.set_volume(vol)
+
     return sound
-
-
-def collision(inf_1, inf_2):
-    for i in range(len(inf_1['pos'])):
-        inf_1['rect'].topleft = inf_1['pos'][i]
-        for j in range(len(inf_2['pos'])):
-            inf_2['rect'].topleft = inf_2['pos'][j]
-            if (inf_1['rect']).colliderect(inf_2['rect']):
-                return [i, j]
-    return None
 
 
 def change_pos(tuple_1, tuple_2):
@@ -53,341 +470,1181 @@ def change_pos(tuple_1, tuple_2):
 
 
 def add_event(id_event, timer):
-    x = pygame.USEREVENT + id_event
-    pygame.time.set_timer(x, timer)
-    return x
+
+    event_id = pygame.USEREVENT + id_event
+
+    pygame.time.set_timer(event_id, timer)
+
+    return event_id
 
 
-def show_score_hp(screen, score, hp):
-    temp = text(f"x{score}", 50, 'Yellow')
-    screen.blit(temp, (50, 0))
-    temp = text(f"x{hp}", 50, 'Brown')
-    screen.blit(temp, (50, 60))
+# ================= COLLISION =================
+
+def collision(inf_1, inf_2):
+
+    for i in range(len(inf_1['pos'])):
+
+        inf_1['rect'].topleft = inf_1['pos'][i]
+
+        for j in range(len(inf_2['pos'])):
+
+            inf_2['rect'].topleft = inf_2['pos'][j]
+
+            if inf_1['rect'].colliderect(inf_2['rect']):
+                return [i, j]
+
+    return None
 
 
-def screen_playing(screen, obj, pl_inf, ck_inf, egg_inf, ls_inf, score_inf, score, hp, time):
-    for i, j in obj:
-        screen.blit(i, j)
-    for i in ls_inf['pos']:
-        screen.blit(ls_inf['img'], i)
-    for i in ck_inf['pos']:
-        screen.blit(ck_inf['img'], i)
-    for i in egg_inf['pos']:
-        screen.blit(egg_inf['img'], i)
-    for i in score_inf['pos']:
-        screen.blit(score_inf['img'], i)
-    show_score_hp(screen, score, hp)
-    screen.blit(text(f"Time remaining: {time}", 30, 'Red'), (1100, 700))
-    screen.blit(pl_inf['img'], pl_inf['pos'][0])
+# ================= UI =================
+
+def show_score_hp(screen, score, hp, rays_per_shot=None,
+                   ammo=None, missiles=None):
+
+    score_text = text(f"x{score}", 50, 'Yellow')
+    hp_text = text(f"x{hp}", 50, 'Brown')
+
+    screen.blit(score_text, (50, 0))
+    screen.blit(hp_text, (50, 60))
+
+    if ammo is not None:
+
+        atxt = text(f"Dan x{ammo}", 44, 'White')
+
+        screen.blit(atxt, (50, 118))
+
+    if rays_per_shot is not None:
+
+        ray_text = text(f"Tia/lan: x{rays_per_shot}", 38, 'Cyan')
+
+        screen.blit(ray_text, (50, 168))
+
+    if missiles is not None:
+
+        mtxt = text(f"Ten lua duoi x{missiles}", 36, 'Orange')
+
+        screen.blit(mtxt, (50, 216))
+
+
+def screen_show_mess(screen, string):
+
+    screen.blit(get_img('bg'), (0, 0))
+
+    screen.blit(
+        text(string, 100, 'Red'),
+        (500, 200)
+    )
+
     pygame.display.update()
 
 
+def screen_playing(screen, obj, pl_inf, ck_inf,
+                   egg_inf, ls_inf, score_inf, gift_inf,
+                   score, hp, time, rays_per_shot=None,
+                   boss_draw=None, missile_inf=None,
+                   big_egg_inf=None, missiles_left=None,
+                   ammo=None, hit_bursts=None):
+
+    for i, j in obj:
+        screen.blit(i, j)
+
+    if boss_draw is not None:
+
+        bx, by = boss_draw['pos']
+
+        screen.blit(boss_draw['img'], (bx, by))
+
+        bw = boss_draw['img'].get_width()
+
+        ratio = boss_draw['hp'] / max(1, boss_draw['max_hp'])
+
+        pygame.draw.rect(screen, (90, 0, 0), (bx, by - 24, bw, 16))
+
+        pygame.draw.rect(
+            screen,
+            (40, 220, 60),
+            (bx, by - 24, int(bw * ratio), 16),
+        )
+
+    for i in ls_inf['pos']:
+        screen.blit(ls_inf['img'], i)
+
+    if missile_inf is not None:
+
+        for m in missile_inf['items']:
+
+            screen.blit(
+                missile_inf['img'],
+                (int(m['x']), int(m['y'])),
+            )
+
+    for i in ck_inf['pos']:
+        screen.blit(ck_inf['img'], i)
+
+    for i in egg_inf['pos']:
+        screen.blit(egg_inf['img'], i)
+
+    if big_egg_inf is not None:
+
+        for i in big_egg_inf['pos']:
+            screen.blit(big_egg_inf['img'], i)
+
+    for i in score_inf['pos']:
+        screen.blit(score_inf['img'], i)
+
+    for i in gift_inf['pos']:
+        screen.blit(gift_inf['img'], i)
+
+    if hit_bursts:
+
+        draw_hit_bursts(screen, hit_bursts)
+
+    show_score_hp(
+        screen,
+        score,
+        hp,
+        rays_per_shot,
+        ammo,
+        missiles_left,
+    )
+
+    screen.blit(
+        text(f"Time remaining: {time}", 30, 'Red'),
+        (1100, 700)
+    )
+
+    screen.blit(
+        pl_inf['img'],
+        pl_inf['pos'][0]
+    )
+
+    pygame.display.update()
+
+
+# ================= MENU =================
+
 def add_pos_menu(obj_menu):
+
     new_arr = [[obj_menu[0], (500, 100)]]
+
     pos_y = 350
+
     for i in range(1, len(obj_menu)):
-        new_arr.append([obj_menu[i], (600, pos_y)])
+
+        new_arr.append(
+            [obj_menu[i], (600, pos_y)]
+        )
+
         pos_y += 100
+
     return new_arr
 
 
 def create_menu(screen, menu):
+
     obj = add_pos_menu(menu)
+
     bg = get_img('bg')
+
     signal = text('>>>', 50, 'White')
-    pos_sgn = (obj[1][1][0] - 80, obj[1][1][1])
+
+    pos_sgn = (
+        obj[1][1][0] - 80,
+        obj[1][1][1]
+    )
+
     fps = pygame.time.Clock()
+
     select = 1
+
     while True:
+
         fps.tick(15)
+
         screen.blit(bg, (0, 0))
+
         screen.blit(signal, pos_sgn)
+
         for i, j in obj:
             screen.blit(i, j)
+
         pygame.display.update()
 
         for event in pygame.event.get():
-            # Close app
+
             if event.type == pygame.QUIT:
                 close()
-        # Key
+
         key = pygame.key.get_pressed()
+
         if key[pygame.K_DOWN] and select < len(menu) - 1:
+
             select += 1
+
             pos_sgn = change_pos(pos_sgn, (0, 100))
+
         elif key[pygame.K_UP] and select > 1:
+
             select -= 1
+
             pos_sgn = change_pos(pos_sgn, (0, -100))
+
         elif key[pygame.K_RETURN]:
+
             return select
 
 
+# ================= CREATE OBJECT =================
+
 def create_chicken(level, number_ck, ck_inf):
+
     distance = 80
+
     x = 100
     y = 0
+
     direct = False
+
     if level < 4:
+
         ck_inf['pos'].append((x, y))
+
         for i in range(1, number_ck):
+
             if i % 15 == 0:
                 x = 100
                 y += 100
             else:
                 x += distance
+
             ck_inf['pos'].append((x, y))
-        return
+
     else:
-        ck_row = 10
-        if level == 5:
-            ck_row = 15
+
+        if level <= 5:
+            ck_row = 10 if level < 5 else 15
+        else:
+            ck_row = min(18, 12 + (level - 6) // 2)
+
         ck_inf['pos'].append((x, y))
         ck_inf['direct'].append(direct)
+
         for i in range(1, number_ck):
+
             if i % ck_row == 0:
+
                 if direct:
                     x = 100
                     direct = False
                 else:
                     x = 500
                     direct = True
+
                 y += 100
+
             else:
                 x += distance
+
             ck_inf['pos'].append((x, y))
             ck_inf['direct'].append(direct)
 
 
+def _laser_shot_offsets(num_ray):
+
+    patterns = {
+        1: [(20, -20)],
+        2: [(0, -20), (40, -20)],
+        3: [(-20, -20), (20, -20), (60, -20)],
+        4: [(-40, -20), (0, -20), (40, -20), (80, -20)],
+        5: [(-50, -20), (-15, -20), (20, -20), (55, -20), (90, -20)],
+        6: [(-60, -22), (-30, -22), (0, -22), (30, -22), (60, -22), (95, -22)],
+    }
+
+    n = max(1, min(num_ray, max_rays_per_shot()))
+
+    return patterns.get(n, patterns[6])
+
+
 def create_laser(num_ray, ls_inf, pl_inf, sound):
-    if num_ray == 1:
-        ls_inf['pos'].append(change_pos(pl_inf['pos'][0], (20, -20)))
-        sound.play()
-    elif num_ray == 2:
-        ls_inf['pos'].append(change_pos(pl_inf['pos'][0], (0, -20)))
-        ls_inf['pos'].append(change_pos(pl_inf['pos'][0], (40, -20)))
-        sound.play()
-    elif num_ray == 3:
-        ls_inf['pos'].append(change_pos(pl_inf['pos'][0], (-20, -20)))
-        ls_inf['pos'].append(change_pos(pl_inf['pos'][0], (60, -20)))
-        ls_inf['pos'].append(change_pos(pl_inf['pos'][0], (20, -20)))
-        sound.play()
+
+    for off in _laser_shot_offsets(num_ray):
+
+        ls_inf['pos'].append(change_pos(pl_inf['pos'][0], off))
+
+    sound.play()
 
 
-def create_egg(level, egg_inf, ck_inf):
-    if len(ck_inf['pos']) and level < 4:
-        temp = random.randint(0, len(ck_inf['pos']) - 1)
-        egg_inf['pos'].append(change_pos(ck_inf['pos'][temp], (10, 50)))
-    elif len(ck_inf['pos']) and level >= 4:
-        temp = random.randint(0, len(ck_inf['pos']) - 1)
-        egg_inf['pos'].append(change_pos(ck_inf['pos'][temp], (10, 50)))
-        egg_inf['direct'].append(ck_inf['direct'][temp])
+def create_egg(level, egg_inf, ck_inf, boss_mode=False,
+               boss_pos=None, big_egg_inf=None):
 
+    if boss_mode and boss_pos is not None and big_egg_inf is not None:
+
+        big_egg_inf['pos'].append(
+            change_pos(boss_pos, (62, 175))
+        )
+
+        big_egg_inf['direct'].append(random.choice([True, False]))
+
+        return
+
+    if len(ck_inf['pos']) == 0:
+        return
+
+    temp = random.randint(0, len(ck_inf['pos']) - 1)
+
+    egg_inf['pos'].append(
+        change_pos(ck_inf['pos'][temp], (10, 50))
+    )
+
+    if level >= 4:
+        egg_inf['direct'].append(
+            ck_inf['direct'][temp]
+        )
+
+
+# ================= MOVE =================
 
 def move(speed, inf):
+
     for i in range(len(inf['pos'])):
-        inf['pos'][i] = change_pos(inf['pos'][i], (0, speed))
+
+        inf['pos'][i] = change_pos(
+            inf['pos'][i],
+            (0, speed)
+        )
 
 
-def move_ck(inf):
+def move_ck(inf, step=1):
+
     get_dir = {
-        True: -1,
-        False: 1,
+        True: -step,
+        False: step,
     }
+
     for i in range(len(inf['pos'])):
-        inf['pos'][i] = change_pos(inf['pos'][i], (get_dir[inf['direct'][i]], 0))
+
+        inf['pos'][i] = change_pos(
+            inf['pos'][i],
+            (get_dir[inf['direct'][i]], 0)
+        )
+
+        # quay lại màn hình
         if inf['pos'][i][0] > 1360:
-            inf['pos'][i] = (0, inf['pos'][i][1])
+
+            inf['pos'][i] = (
+                0,
+                inf['pos'][i][1]
+            )
+
         elif inf['pos'][i][0] < 0:
-            inf['pos'][i] = (1300, inf['pos'][i][1])
 
+            inf['pos'][i] = (
+                1300,
+                inf['pos'][i][1]
+            )
 
-def move_eggs(inf):
+def move_eggs(inf, fall_y=2, horiz=1):
+
     get_dir = {
-        True: -1,
-        False: 1,
+        True: -horiz,
+        False: horiz,
     }
-    for i in range(len(inf['pos'])):
-        inf['pos'][i] = change_pos(inf['pos'][i], (get_dir[inf['direct'][i]], 2))
 
+    for i in range(len(inf['pos'])):
+
+        inf['pos'][i] = change_pos(
+            inf['pos'][i],
+            (get_dir[inf['direct'][i]], fall_y)
+        )
+
+
+# ================= REMOVE OBJECT =================
 
 def out_screen(inf, size_screen):
-    for i in inf['pos']:
-        if i[0] > size_screen[0] or i[0] < 0 or i[1] > size_screen[1] or i[1] < 0:
-            inf['pos'].remove(i)
+
+    inf['pos'] = [
+        pos for pos in inf['pos']
+        if 0 <= pos[0] <= size_screen[0]
+        and 0 <= pos[1] <= size_screen[1]
+    ]
 
 
 def out_screen_egg(level, inf, size_screen):
-    for i in inf['pos']:
-        if i[0] > size_screen[0] or i[0] < 0 or i[1] > size_screen[1] or i[1] < 0:
+
+    new_pos = []
+    new_direct = []
+
+    for i in range(len(inf['pos'])):
+
+        pos = inf['pos'][i]
+
+        if 0 <= pos[0] <= size_screen[0] and 0 <= pos[1] <= size_screen[1]:
+
+            new_pos.append(pos)
+
             if level > 3:
-                del inf['direct'][inf['pos'].index(i)]
-            inf['pos'].remove(i)
+                new_direct.append(inf['direct'][i])
+
+    inf['pos'] = new_pos
+
+    if level > 3:
+        inf['direct'] = new_direct
 
 
-def screen_show_mess(screen, string):
-    screen.blit(get_img('bg'), (0, 0))
-    screen.blit(text(string, 100, 'Red'), (500, 200))
-    pygame.display.update()
+# ================= DIFFICULTY =================
 
 
-def loop_playing(screen, load=None):
+def egg_interval_mult(difficulty):
+
+    return {1: 1.45, 2: 1.0, 3: 0.72}[difficulty]
+
+
+def count_mult(difficulty):
+
+    return {1: 1.22, 2: 1.0, 3: 0.82}[difficulty]
+
+
+def ck_speed_step(difficulty, lv_game):
+
+    base = {1: 1, 2: 1, 3: 2}[difficulty]
+
+    if lv_game > 3:
+
+        base += max(0, (lv_game - 4) // 3)
+
+    return base
+
+
+def stage_ramp(lv_game):
+
+    return 1.0 + (lv_game - 1) * 0.042
+
+
+def egg_fall_speed(lv_game):
+
+    return 2 + max(0, (lv_game - 1) // 4)
+
+
+# ================= MAIN GAME =================
+
+
+def loop_playing(screen, load=None, difficulty=None):
+
     if load is None:
-        load = [1, 1, 0, 5]
-    lv_game, lv_gun, score, hp = load[0], load[1], load[2], load[3]
-    if lv_game > 1:
-        w_file(lv_game, lv_gun, score, hp)
+
+        prev = r_file()
+
+        sk = prev[7] if len(prev) > 7 else 0
+
+        d = difficulty if difficulty is not None else 2
+
+        load = [1, 1, 0, 5, 0, d, 0, sk, starting_ammo(d)]
+
+    elif len(load) == 4:
+
+        load = load + [0, 2, 0, 0, starting_ammo(2)]
+
+    elif len(load) == 6:
+
+        load = load + [0, 0, starting_ammo(2)]
+
+    elif len(load) == 8:
+
+        load.append(starting_ammo(load[5] if load[5] in (1, 2, 3) else 2))
+
+    (
+        lv_game,
+        lv_gun,
+        score,
+        hp,
+        gift_rays,
+        diff_saved,
+        missiles,
+        skin_index,
+        ammo,
+    ) = load[:9]
+
+    if difficulty is not None:
+
+        diff_saved = difficulty
+
+        gift_rays = 0
+
+        missiles = 0
+
+        ammo = starting_ammo(difficulty)
+
+    difficulty = diff_saved
+
+    if difficulty not in (1, 2, 3):
+
+        difficulty = 2
+
+    gift_rays = max(0, gift_rays)
+
+    missiles = max(0, missiles)
+
+    ammo = max(0, ammo)
+
+    ns = len(ship_skin_filenames())
+
+    skin_index = max(0, min(ns - 1, skin_index))
+
+    gifts_spawned_stage = 0
+
+    hit_bursts = []
 
     shoot_time = 0
     num_ck = 1
     num_create_ck = 2
     max_time = 3
     req_plus_hp = 4
-    min_req_score = 5
+
     game = game_level()
 
     ray_gun = 1
     speed_gun = 2
     req_score_gun = 3
+
     gun = gun_level()
 
-    screen_show_mess(screen, f"LEVEL {lv_game}")
-    pygame.time.delay(3000)
+    boss_mode = use_boss_fight(lv_game, difficulty)
+
+    msg = f"BOSS — MÀN {lv_game}" if boss_mode else f"MÀN {lv_game}"
+
+    screen_show_mess(screen, msg)
+
+    pygame.time.delay(2000)
 
     fps = pygame.time.Clock()
+
     Max = pygame.display.get_window_size()
+
     music = all_music()
 
-    pl_inf = player_inf()
+    pl_inf = player_inf(skin_index)
+
     ck_inf = chicken_inf()
+
     ls_inf = laser_inf()
+
     egg_inf = eg_inf()
+
+    big_egg_inf = eg_inf_big()
+
     score_inf = sc_inf()
 
+    gift_inf = gift_pickup_inf()
+
+    missile_inf = missile_weapon_inf()
+
+    boss_hp = 0
+
+    boss_max_hp = 0
+
+    boss_pos = [Max[0] // 2 - 90, 110]
+
+    boss_vx = 7
+
+    boss_img = None
+
+    if boss_mode:
+
+        boss_img = pygame.transform.scale(make_enemy_sprite(2), (180, 180))
+
+        bw = boss_img.get_width()
+
+        boss_pos[0] = Max[0] // 2 - bw // 2
+
+        boss_vx = 5 + lv_game + (5 if difficulty == 3 else 0)
+
+        boss_hp = 130 + lv_game * 48 + (85 if difficulty == 3 else 0)
+
+        boss_max_hp = boss_hp
+
+    else:
+
+        create_chicken(
+            lv_game,
+            game[lv_game][num_ck],
+            ck_inf
+        )
+
+        game[lv_game][num_create_ck] -= 1
+
     size_player = pl_inf['img'].get_size()
+
     laser_sound = load_music(music['shoot'], 0.05)
+
     boom_sound = load_music(music['explode_ck'], 0.05)
+
     collision_sound = load_music(music['collision'], 0.05)
 
-    create_chicken(lv_game, game[lv_game][num_ck], ck_inf)
-    game[lv_game][num_create_ck] -= 1
+    ramp = stage_ramp(lv_game)
 
-    ls_speed = add_event(0, gun[lv_gun][shoot_time])
-    egg_speed = add_event(1, game[lv_game][shoot_time])
+    egg_ms = int(
+        game[lv_game][shoot_time]
+        * egg_interval_mult(difficulty)
+        / ramp
+    )
+
+    if boss_mode:
+
+        egg_ms = max(95, egg_ms // 3)
+
+    else:
+
+        egg_ms = max(160, egg_ms)
+
+    egg_speed = add_event(1, egg_ms)
+
     countdown = add_event(2, 1000)
 
-    count = game[lv_game][max_time]
+    count = max(
+        5,
+        int(
+            game[lv_game][max_time]
+            * count_mult(difficulty)
+            / ramp
+        ),
+    )
+
+    if boss_mode:
+
+        count = max(count, 48 + lv_game * 4)
+
     obj = obj_default_playing()
+
     plus_hp = False
 
+    ck_step = ck_speed_step(difficulty, lv_game)
+
+    egg_dy = egg_fall_speed(lv_game)
+
+    egg_horiz = 1 + max(0, (lv_game - 4) // 5)
+
+    big_fall = egg_dy + 5 + (5 if boss_mode else 0)
+
+    big_hz = egg_horiz + (2 if boss_mode else 0)
+
+    def rays_this_shot():
+
+        base = gun[lv_gun][ray_gun]
+
+        return min(max_rays_per_shot(), base + gift_rays)
+
     while True:
+
         fps.tick(60)
-        screen_playing(screen, obj, pl_inf, ck_inf, egg_inf, ls_inf, score_inf, score, hp, count)
-        # Handle event
+
+        boss_draw = None
+
+        if boss_mode and boss_hp > 0 and boss_img is not None:
+
+            boss_draw = {
+                'hp': boss_hp,
+                'max_hp': boss_max_hp,
+                'pos': (boss_pos[0], boss_pos[1]),
+                'img': boss_img,
+            }
+
+        screen_playing(
+            screen,
+            obj,
+            pl_inf,
+            ck_inf,
+            egg_inf,
+            ls_inf,
+            score_inf,
+            gift_inf,
+            score,
+            hp,
+            count,
+            rays_this_shot(),
+            boss_draw,
+            missile_inf,
+            big_egg_inf,
+            missiles,
+            ammo,
+            hit_bursts,
+        )
+
         for event in pygame.event.get():
-            # Close app
+
             if event.type == pygame.QUIT:
                 close()
-            # Create laser
-            elif event.type == ls_speed:
-                create_laser(gun[lv_gun][ray_gun], ls_inf, pl_inf, laser_sound)
-            # Create egg
+
             elif event.type == egg_speed:
-                create_egg(lv_game, egg_inf, ck_inf)
+
+                create_egg(
+                    lv_game,
+                    egg_inf,
+                    ck_inf,
+                    boss_mode,
+                    tuple(boss_pos) if boss_mode else None,
+                    big_egg_inf,
+                )
+
             elif event.type == countdown:
+
                 count -= 1
 
-        if game[lv_game][num_create_ck] > 0 and (len(ck_inf['pos']) == 0 and len(score_inf['pos']) == 0):
-            create_chicken(lv_game, game[lv_game][num_ck], ck_inf)
-            game[lv_game][num_create_ck] -= 1
+            elif event.type == pygame.MOUSEBUTTONDOWN:
 
-        if score % game[lv_game][req_plus_hp] == 0 and score != 0 and plus_hp is False:
-            hp += 1
-            plus_hp = True
+                if event.button == 1:
 
-        if (len(ck_inf['pos']) == 0 and len(score_inf['pos']) == 0) or (
-                count == 0 and score >= game[lv_game][min_req_score]):
+                    if ammo > 0:
+
+                        create_laser(
+                            rays_this_shot(),
+                            ls_inf,
+                            pl_inf,
+                            laser_sound
+                        )
+
+                        ammo -= 1
+
+                elif event.button == 3 and missiles > 0:
+
+                    sx = float(
+                        pl_inf['pos'][0][0] + size_player[0] // 2 - 13
+                    )
+
+                    sy = float(pl_inf['pos'][0][1])
+
+                    missile_inf['items'].append({'x': sx, 'y': sy})
+
+                    missiles -= 1
+
+            elif event.type == pygame.KEYDOWN:
+
+                if event.key == pygame.K_ESCAPE:
+
+                    choose = create_menu(
+                        screen,
+                        menu_pause()
+                    )
+
+                    if choose == 2:
+                        break
+
+        stage_clear = False
+
+        if boss_mode:
+
+            if boss_hp <= 0:
+
+                stage_clear = True
+
+        else:
+
+            if (
+                len(ck_inf['pos']) == 0
+                and len(score_inf['pos']) == 0
+                and len(gift_inf['pos']) == 0
+            ):
+
+                stage_clear = True
+
+        if stage_clear:
+
             lv_game += 1
-            w_file(lv_game, lv_gun, score, hp)
-            load = [lv_game, lv_gun, score, hp]
+
+            w_file(
+                lv_game,
+                lv_gun,
+                score,
+                hp,
+                gift_rays,
+                difficulty,
+                missiles,
+                skin_index,
+                ammo,
+            )
+
+            load = [
+                lv_game,
+                lv_gun,
+                score,
+                hp,
+                gift_rays,
+                difficulty,
+                missiles,
+                skin_index,
+                ammo,
+            ]
+
+            pygame.time.set_timer(egg_speed, 0)
+
+            pygame.time.set_timer(countdown, 0)
+
             break
-        elif count == 0 or hp == 0:
+
+        if count <= 0 or hp <= 0:
+
             screen_show_mess(screen, 'YOU LOSE')
+
             pygame.time.delay(3000)
-            if lv_game != 1:
-                remove('../Data/save/save.txt')
+
+            pygame.time.set_timer(egg_speed, 0)
+
+            pygame.time.set_timer(countdown, 0)
+
+            record_high_score(score)
+
+            w_file(
+                1,
+                1,
+                0,
+                5,
+                0,
+                2,
+                0,
+                skin_index,
+                starting_ammo(2),
+            )
+
             return
 
-        # Upgrade Gun
-        if score >= gun[lv_gun][req_score_gun] and lv_gun < len(gun):
+        if (
+            lv_gun < len(gun) - 1
+            and score >= gun[lv_gun][req_score_gun]
+        ):
+
             lv_gun += 1
-            pygame.time.set_timer(ls_speed, gun[lv_gun][shoot_time])
 
-        # Delete out screen
-        out_screen(ls_inf, Max)
-        out_screen(score_inf, Max)
-        out_screen_egg(lv_game, egg_inf, Max)
+        if boss_mode and boss_hp > 0 and boss_img is not None:
 
-        # Move
-        if lv_game > 3:
-            move_ck(ck_inf)
-            move_eggs(egg_inf)
-        else:
-            move(2, egg_inf)
-        move(- gun[lv_gun][speed_gun], ls_inf)
+            bw = boss_img.get_width()
+
+            boss_pos[0] += boss_vx
+
+            if boss_pos[0] < 35 or boss_pos[0] > Max[0] - bw - 35:
+
+                boss_vx *= -1
+
+            boss_pos[1] = 84 + int(
+                52 * math.sin(pygame.time.get_ticks() * 0.0028)
+            )
+
+        if not boss_mode:
+
+            if lv_game > 3:
+
+                move_ck(ck_inf, ck_step)
+
+                move_eggs(egg_inf, egg_dy, egg_horiz)
+
+            else:
+
+                move(egg_dy, egg_inf)
+
+        move_eggs(big_egg_inf, big_fall, big_hz)
+
+        move(-gun[lv_gun][speed_gun], ls_inf)
+
+        step_homing_missiles(
+            missile_inf,
+            17,
+            boss_mode,
+            boss_hp,
+            boss_pos,
+            boss_img,
+            ck_inf,
+        )
+
+        cull_missiles(missile_inf, Max)
+
         move(1, score_inf)
 
-        # Delete chicken
-        check = collision(ls_inf, ck_inf)
-        if check is not None:
-            boom_sound.play()
-            screen.blit(ck_inf['img_explode'], ck_inf['pos'][check[1]])
-            pygame.display.update()
-            score_inf['pos'].append(ck_inf['pos'][check[1]])
-            ls_inf['pos'].pop(check[0])
-            ck_inf['pos'].pop(check[1])
-            if lv_game > 3:
-                ck_inf['direct'].pop(check[1])
+        move(1, gift_inf)
 
-        # Delete Egg
+        out_screen(ls_inf, Max)
+
+        out_screen(score_inf, Max)
+
+        out_screen(gift_inf, Max)
+
+        out_screen_egg(lv_game, egg_inf, Max)
+
+        out_screen_egg(lv_game, big_egg_inf, Max)
+
+        if boss_mode and boss_hp > 0 and boss_img is not None:
+
+            br = pygame.Rect(
+                boss_pos[0],
+                boss_pos[1],
+                boss_img.get_width(),
+                boss_img.get_height(),
+            )
+
+            for li in range(len(ls_inf['pos']) - 1, -1, -1):
+
+                ls_inf['rect'].topleft = ls_inf['pos'][li]
+
+                if ls_inf['rect'].colliderect(br):
+
+                    boom_sound.play()
+
+                    boss_hp -= 1
+
+                    ls_inf['pos'].pop(li)
+
+                    if boss_hp <= 0:
+
+                        break
+
+        else:
+
+            check = collision(ls_inf, ck_inf)
+
+            if check is not None:
+
+                boom_sound.play()
+
+                ci = check[1]
+
+                ck_pos = ck_inf['pos'][ci]
+
+                ck_dir = ck_inf['direct'][ci] if lv_game > 3 else False
+
+                kind = roll_chicken_drop(gifts_spawned_stage)
+
+                if kind == 'gift':
+
+                    gifts_spawned_stage += 1
+
+                    gift_inf['pos'].append(ck_pos)
+
+                elif kind == 'egg':
+
+                    egg_inf['pos'].append(
+                        change_pos(ck_pos, (10, 50))
+                    )
+
+                    if lv_game > 3:
+
+                        egg_inf['direct'].append(ck_dir)
+
+                else:
+
+                    score_inf['pos'].append(ck_pos)
+
+                ls_inf['pos'].pop(check[0])
+
+                ck_inf['pos'].pop(ci)
+
+                if lv_game > 3:
+
+                    ck_inf['direct'].pop(ci)
+
+        if missile_inf['items']:
+
+            for mi in range(len(missile_inf['items']) - 1, -1, -1):
+
+                m = missile_inf['items'][mi]
+
+                missile_inf['rect'].topleft = (int(m['x']), int(m['y']))
+
+                if boss_mode and boss_hp > 0 and boss_img is not None:
+
+                    br = pygame.Rect(
+                        boss_pos[0],
+                        boss_pos[1],
+                        boss_img.get_width(),
+                        boss_img.get_height(),
+                    )
+
+                    if missile_inf['rect'].colliderect(br):
+
+                        boom_sound.play()
+
+                        boss_hp -= 55
+
+                        missile_inf['items'].pop(mi)
+
+                        continue
+
+                hit_ci = None
+
+                for ci in range(len(ck_inf['pos'])):
+
+                    ck_inf['rect'].topleft = ck_inf['pos'][ci]
+
+                    if missile_inf['rect'].colliderect(ck_inf['rect']):
+
+                        hit_ci = ci
+
+                        break
+
+                if hit_ci is not None:
+
+                    boom_sound.play()
+
+                    ck_pos = ck_inf['pos'][hit_ci]
+
+                    ck_dir = (
+                        ck_inf['direct'][hit_ci] if lv_game > 3 else False
+                    )
+
+                    kind = roll_chicken_drop(gifts_spawned_stage)
+
+                    if kind == 'gift':
+
+                        gifts_spawned_stage += 1
+
+                        gift_inf['pos'].append(ck_pos)
+
+                    elif kind == 'egg':
+
+                        egg_inf['pos'].append(
+                            change_pos(ck_pos, (10, 50))
+                        )
+
+                        if lv_game > 3:
+
+                            egg_inf['direct'].append(ck_dir)
+
+                    else:
+
+                        score_inf['pos'].append(ck_pos)
+
+                    ck_inf['pos'].pop(hit_ci)
+
+                    if lv_game > 3:
+
+                        ck_inf['direct'].pop(hit_ci)
+
+                    missile_inf['items'].pop(mi)
+
         check = collision(egg_inf, pl_inf)
+
         if check is not None:
+
             collision_sound.play()
-            screen.blit(pl_inf['img_explode'], pl_inf['pos'][check[1]])
-            pygame.display.update()
-            pygame.time.delay(20)
+
+            ex, ey = egg_inf['pos'][check[0]]
+
+            ew = egg_inf['img'].get_width()
+
+            eh = egg_inf['img'].get_height()
+
+            hit_bursts.append({
+                'pos': (ex + ew // 2, ey + eh // 2),
+                'ttl': 22,
+            })
+
             egg_inf['pos'].pop(check[0])
+
             if lv_game > 3:
+
                 egg_inf['direct'].pop(check[0])
+
+            ammo = max(0, ammo - EGG_AMMO_LOSS)
+
             hp -= 1
 
-        # Plus Score
-        check = collision(score_inf, pl_inf)
+        check = collision(big_egg_inf, pl_inf)
+
         if check is not None:
+
+            collision_sound.play()
+
+            ex, ey = big_egg_inf['pos'][check[0]]
+
+            ew = big_egg_inf['img'].get_width()
+
+            eh = big_egg_inf['img'].get_height()
+
+            hit_bursts.append({
+                'pos': (ex + ew // 2, ey + eh // 2),
+                'ttl': 26,
+            })
+
+            big_egg_inf['pos'].pop(check[0])
+
+            big_egg_inf['direct'].pop(check[0])
+
+            ammo = max(0, ammo - BIG_EGG_AMMO_LOSS)
+
+            hp -= 2
+
+        check = collision(score_inf, pl_inf)
+
+        if check is not None:
+
             score_inf['pos'].pop(check[0])
+
+            old_s = score
+
             score += 1
+
+            if score // 50 > old_s // 50:
+
+                missiles += 1
+
             plus_hp = False
 
-        # Move Player
-        key = pygame.key.get_pressed()
-        pos_x, pos_y = pl_inf['pos'][0]
-        more_max_w = pos_x - pl_inf['move'] > 0
-        less_max_w = pos_x + pl_inf['move'] + size_player[0] <= Max[0]
-        more_half_h = pos_y - pl_inf['move'] > Max[1] // 2
-        less_max_h = pos_y + pl_inf['move'] + size_player[1] <= Max[1]
-        if (key[pygame.K_LEFT] or key[pygame.K_a]) and more_max_w:
-            pl_inf['pos'][0] = change_pos(pl_inf['pos'][0], (-pl_inf['move'], 0))
-        elif (key[pygame.K_RIGHT] or key[pygame.K_d]) and less_max_w:
-            pl_inf['pos'][0] = change_pos(pl_inf['pos'][0], (pl_inf['move'], 0))
-        elif (key[pygame.K_UP] or key[pygame.K_w]) and more_half_h:
-            pl_inf['pos'][0] = change_pos(pl_inf['pos'][0], (0, -pl_inf['move']))
-        elif (key[pygame.K_DOWN] or key[pygame.K_s]) and less_max_h:
-            pl_inf['pos'][0] = change_pos(pl_inf['pos'][0], (0, pl_inf['move']))
-        elif key[pygame.K_ESCAPE]:
-            choose = create_menu(screen, menu_pause())
-            if choose == 2:
-                break
+        check = collision(gift_inf, pl_inf)
+
+        if check is not None:
+
+            gift_inf['pos'].pop(check[0])
+
+            gift_rays += 1
+
+            ammo = min(260, ammo + GIFT_AMMO_BONUS)
+
+        if (
+            score % game[lv_game][req_plus_hp] == 0
+            and score != 0
+            and plus_hp is False
+        ):
+
+            hp += 1
+
+            plus_hp = True
+
+        mx, my = pygame.mouse.get_pos()
+
+        pw, ph = size_player
+
+        half_w = pw // 2
+
+        half_h = ph // 2
+
+        nx = max(0, min(Max[0] - pw, mx - half_w))
+
+        ny = max(0, min(Max[1] - ph, my - half_h))
+
+        pl_inf['pos'][0] = (nx, ny)
+
     if load[0] < len(game):
+
         loop_playing(screen, load)
+
     else:
+
+        pygame.time.set_timer(egg_speed, 0)
+
+        pygame.time.set_timer(countdown, 0)
+
         screen_show_mess(screen, 'YOU WIN')
+
+        pygame.time.delay(3000)
+
+        record_high_score(score)
+
+        w_file(
+            1,
+            1,
+            0,
+            5,
+            0,
+            2,
+            0,
+            skin_index,
+            starting_ammo(2),
+        )
+
     return
