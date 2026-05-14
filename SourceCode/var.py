@@ -121,39 +121,34 @@ def make_player_ship(skin_index):
     s = pygame.Surface((w, h), pygame.SRCALPHA)
 
     palettes = [
-        ((90, 200, 255), (40, 120, 255), (220, 245, 255)),
-        ((255, 140, 90), (200, 70, 40), (255, 230, 200)),
-        ((120, 255, 160), (40, 180, 90), (230, 255, 235)),
-        ((255, 110, 200), (180, 40, 140), (255, 220, 245)),
+        ((50, 200, 255), (10, 100, 255), (200, 255, 255)),
+        ((255, 100, 50), (200, 40, 10), (255, 220, 150)),
+        ((100, 255, 150), (20, 180, 80), (200, 255, 220)),
+        ((255, 100, 220), (180, 20, 120), (255, 200, 240)),
     ]
 
     main, dark, light = palettes[skin_index % len(palettes)]
 
-    pts = [
-        (w // 2, 4),
-        (w - 6, h - 14),
-        (w // 2 + 10, h - 4),
-        (w // 2 - 10, h - 4),
-        (6, h - 14),
-    ]
+    # Main Body Base
+    pygame.draw.polygon(s, (80, 90, 100), [(w//2, 2), (w-8, h//2+5), (w//2, h-5), (8, h//2+5)])
+    
+    # Wings
+    pygame.draw.polygon(s, dark, [(w//2, 10), (w-2, h-10), (w-12, h-4), (w//2, h-16)])
+    pygame.draw.polygon(s, dark, [(w//2, 10), (2, h-10), (12, h-4), (w//2, h-16)])
 
-    pygame.draw.polygon(s, dark, pts)
+    # Cockpit
+    pygame.draw.polygon(s, main, [(w//2, 15), (w//2+12, h//2+10), (w//2-12, h//2+10)])
+    pygame.draw.ellipse(s, (180, 230, 255, 200), (w//2-6, 18, 12, 18))
 
-    pygame.draw.polygon(
-        s,
-        main,
-        [
-            (w // 2, 10),
-            (w - 12, h - 18),
-            (w // 2 + 6, h - 10),
-            (w // 2 - 6, h - 10),
-            (12, h - 18),
-        ],
-    )
+    # Engines
+    pygame.draw.circle(s, (255, 150, 50), (w//2-8, h-5), 4)
+    pygame.draw.circle(s, (255, 150, 50), (w//2+8, h-5), 4)
+    pygame.draw.circle(s, (255, 255, 255), (w//2-8, h-3), 2)
+    pygame.draw.circle(s, (255, 255, 255), (w//2+8, h-3), 2)
 
-    pygame.draw.line(s, light, (w // 2, 12), (w // 2, h - 16), 2)
-
-    pygame.draw.circle(s, (255, 255, 255, 200), (w // 2, h // 2 + 4), 4)
+    # Laser blasters
+    pygame.draw.line(s, light, (8, h//2+5), (8, 10), 2)
+    pygame.draw.line(s, light, (w-8, h//2+5), (w-8, 10), 2)
 
     return s.convert_alpha()
 
@@ -165,27 +160,36 @@ def make_enemy_sprite(variant=0):
     s = pygame.Surface((w, h), pygame.SRCALPHA)
 
     skins = [
-        ((190, 90, 255), (120, 40, 200)),
-        ((255, 95, 130), (200, 40, 70)),
-        ((90, 220, 190), (30, 140, 110)),
-        ((255, 210, 80), (200, 120, 30)),
+        ((180, 80, 255), (100, 20, 200), (0, 255, 255)),
+        ((255, 80, 110), (180, 20, 50), (255, 255, 0)),
+        ((80, 200, 170), (20, 120, 90), (255, 0, 255)),
+        ((255, 190, 60), (180, 100, 20), (0, 255, 0)),
     ]
 
-    body, shadow = skins[variant % len(skins)]
+    body, shadow, light = skins[variant % len(skins)]
 
-    pygame.draw.ellipse(s, shadow, (5, 10, w - 10, h - 14))
+    # Glass dome (more 3D)
+    pygame.draw.ellipse(s, (150, 200, 255, 150), (w // 2 - 14, 5, 28, 24))
+    pygame.draw.ellipse(s, (220, 240, 255, 200), (w // 2 - 8, 8, 12, 10))
 
-    pygame.draw.ellipse(s, body, (7, 8, w - 14, h - 16))
+    # UFO Body (metallic rings)
+    pygame.draw.ellipse(s, (60, 60, 70), (2, 20, w - 4, 18))
+    pygame.draw.ellipse(s, shadow, (4, 21, w - 8, 16))
+    pygame.draw.ellipse(s, body, (6, 22, w - 12, 14))
+    pygame.draw.ellipse(s, (200, 200, 200, 100), (8, 23, w - 16, 6))
 
-    pygame.draw.circle(s, (30, 30, 45), (w // 2 - 11, 22), 6)
+    # Base dome
+    pygame.draw.ellipse(s, (50, 50, 60), (w // 2 - 10, 32, 20, 8))
 
-    pygame.draw.circle(s, (240, 245, 255), (w // 2 - 11, 22), 3)
-
-    pygame.draw.circle(s, (30, 30, 45), (w // 2 + 11, 22), 6)
-
-    pygame.draw.circle(s, (240, 245, 255), (w // 2 + 11, 22), 3)
-
-    pygame.draw.arc(s, (60, 30, 80), (12, 26, w - 24, 14), 3.6, 5.9, 3)
+    # Lights (more detailed)
+    pygame.draw.circle(s, light, (10, 29), 3)
+    pygame.draw.circle(s, (255, 255, 255), (10, 29), 1)
+    
+    pygame.draw.circle(s, light, (w // 2, 32), 4)
+    pygame.draw.circle(s, (255, 255, 255), (w // 2, 32), 2)
+    
+    pygame.draw.circle(s, light, (w - 10, 29), 3)
+    pygame.draw.circle(s, (255, 255, 255), (w - 10, 29), 1)
 
     return s.convert_alpha()
 
@@ -313,6 +317,9 @@ def chicken_inf(enemy_variant=0):
         'rect': ck.get_rect(),
         'pos': [],
         'direct': [],
+        'pattern': [],
+        'base_y': [],
+        'time_offset': [],
     }
 
 

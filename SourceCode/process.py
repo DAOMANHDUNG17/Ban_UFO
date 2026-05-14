@@ -426,11 +426,12 @@ def cull_missiles(missile_inf, max_sz):
 
 def use_boss_fight(lv_game, difficulty):
 
-    if difficulty == 3:
-
+    if difficulty == 1:
+        return lv_game > 0 and lv_game % 10 == 0
+    elif difficulty == 2:
+        return lv_game > 0 and lv_game % 5 == 0
+    else:
         return True
-
-    return lv_game > 0 and lv_game % 5 == 0
 
 
 def roll_chicken_drop(gifts_spawned):
@@ -578,8 +579,13 @@ def screen_playing(screen, obj, pl_inf, ck_inf,
                 (int(m['x']), int(m['y'])),
             )
 
-    for i in ck_inf['pos']:
-        screen.blit(ck_inf['img'], i)
+    t = pygame.time.get_ticks()
+    for i in range(len(ck_inf['pos'])):
+        angle = (t * 0.1) % 360
+        img = ck_inf['img']
+        rotated_img = pygame.transform.rotate(img, angle)
+        rect = rotated_img.get_rect(center=(ck_inf['pos'][i][0] + img.get_width()//2, ck_inf['pos'][i][1] + img.get_height()//2))
+        screen.blit(rotated_img, rect.topleft)
 
     for i in egg_inf['pos']:
         screen.blit(egg_inf['img'], i)
@@ -699,54 +705,38 @@ def create_menu(screen, menu):
 def create_chicken(level, number_ck, ck_inf):
 
     distance = 80
-
     x = 100
     y = 0
-
     direct = False
 
-    if level < 4:
+    patterns = ['horizontal', 'sine', 'zigzag', 'circle']
+    pattern = patterns[(level - 1) % len(patterns)] if level > 1 else 'horizontal'
 
-        ck_inf['pos'].append((x, y))
-
-        for i in range(1, number_ck):
-
-            if i % 15 == 0:
-                x = 100
-                y += 100
-            else:
-                x += distance
-
-            ck_inf['pos'].append((x, y))
-
+    if level <= 3:
+        ck_row = 8
+    elif level <= 5:
+        ck_row = 10
     else:
+        ck_row = min(18, 12 + (level - 6) // 2)
 
-        if level <= 5:
-            ck_row = 10 if level < 5 else 15
+    for i in range(number_ck):
+        if i % ck_row == 0 and i > 0:
+            if direct:
+                x = 100
+                direct = False
+            else:
+                x = 500
+                direct = True
+            y += 80
         else:
-            ck_row = min(18, 12 + (level - 6) // 2)
+            if i > 0:
+                x += distance
 
         ck_inf['pos'].append((x, y))
         ck_inf['direct'].append(direct)
-
-        for i in range(1, number_ck):
-
-            if i % ck_row == 0:
-
-                if direct:
-                    x = 100
-                    direct = False
-                else:
-                    x = 500
-                    direct = True
-
-                y += 100
-
-            else:
-                x += distance
-
-            ck_inf['pos'].append((x, y))
-            ck_inf['direct'].append(direct)
+        ck_inf['pattern'].append(pattern)
+        ck_inf['base_y'].append(y)
+        ck_inf['time_offset'].append(i * 15)
 
 
 def _laser_shot_offsets(num_ray):
@@ -821,27 +811,33 @@ def move_ck(inf, step=1):
         False: step,
     }
 
-    for i in range(len(inf['pos'])):
+    t = pygame.time.get_ticks()
 
-        inf['pos'][i] = change_pos(
-            inf['pos'][i],
-            (get_dir[inf['direct'][i]], 0)
-        )
+    for i in range(len(inf['pos'])):
+        x, y = inf['pos'][i]
+        
+        base_y = inf['base_y'][i] if i < len(inf['base_y']) else y
+        pattern = inf['pattern'][i] if i < len(inf['pattern']) else 'horizontal'
+        offset = inf['time_offset'][i] if i < len(inf['time_offset']) else 0
+
+        dx = get_dir[inf['direct'][i]]
+        x += dx
+
+        if pattern == 'sine':
+            y = base_y + int(50 * math.sin((t + offset * 10) * 0.003))
+        elif pattern == 'zigzag':
+            y = base_y + int(40 * abs(math.sin((t + offset * 10) * 0.003)))
+        elif pattern == 'circle':
+            y = base_y + int(40 * math.sin((t + offset * 10) * 0.003))
+            x += int(5 * math.cos((t + offset * 10) * 0.003))
 
         # quay lại màn hình
-        if inf['pos'][i][0] > 1360:
+        if x > 1360:
+            x = 0
+        elif x < 0:
+            x = 1300
 
-            inf['pos'][i] = (
-                0,
-                inf['pos'][i][1]
-            )
-
-        elif inf['pos'][i][0] < 0:
-
-            inf['pos'][i] = (
-                1300,
-                inf['pos'][i][1]
-            )
+        inf['pos'][i] = (x, y)
 
 def move_eggs(inf, fall_y=2, horiz=1):
 
@@ -878,7 +874,7 @@ def out_screen_egg(level, inf, size_screen):
 
         pos = inf['pos'][i]
 
-        if 0 <= pos[0] <= size_screen[0] and 0 <= pos[1] <= size_screen[1]:
+        if -200 <= pos[0] <= size_screen[0] + 200 and -300 <= pos[1] <= size_screen[1] + 200:
 
             new_pos.append(pos)
 
@@ -1009,8 +1005,14 @@ def loop_playing(screen, load=None, difficulty=None):
     gun = gun_level()
 
     boss_mode = use_boss_fight(lv_game, difficulty)
+    meteor_mode = not boss_mode and lv_game > 0 and lv_game % 3 == 0
 
-    msg = f"BOSS — MÀN {lv_game}" if boss_mode else f"MÀN {lv_game}"
+    if boss_mode:
+        msg = f"BOSS — MÀN {lv_game}"
+    elif meteor_mode:
+        msg = f"MÀN THIÊN THẠCH {lv_game}"
+    else:
+        msg = f"MÀN {lv_game}"
 
     screen_show_mess(screen, msg)
 
@@ -1056,11 +1058,15 @@ def loop_playing(screen, load=None, difficulty=None):
 
         boss_pos[0] = Max[0] // 2 - bw // 2
 
-        boss_vx = 5 + lv_game + (5 if difficulty == 3 else 0)
+        boss_vx = 3 + lv_game * 1.5 + (3 if difficulty == 3 else 0)
 
-        boss_hp = 130 + lv_game * 48 + (85 if difficulty == 3 else 0)
+        boss_hp = 50 + lv_game * 60 + (50 if difficulty == 3 else 0)
 
         boss_max_hp = boss_hp
+
+    elif meteor_mode:
+        
+        pass
 
     else:
 
@@ -1091,6 +1097,10 @@ def loop_playing(screen, load=None, difficulty=None):
     if boss_mode:
 
         egg_ms = max(95, egg_ms // 3)
+
+    elif meteor_mode:
+
+        egg_ms = max(200, egg_ms // 2)
 
     else:
 
@@ -1176,14 +1186,21 @@ def loop_playing(screen, load=None, difficulty=None):
 
             elif event.type == egg_speed:
 
-                create_egg(
-                    lv_game,
-                    egg_inf,
-                    ck_inf,
-                    boss_mode,
-                    tuple(boss_pos) if boss_mode else None,
-                    big_egg_inf,
-                )
+                if meteor_mode:
+                    for _ in range(random.randint(1, 2)):
+                        bx = random.choice([random.randint(0, Max[0]), -50, Max[0] + 50])
+                        by = random.randint(-150, -50)
+                        big_egg_inf['pos'].append((bx, by))
+                        big_egg_inf['direct'].append(bx > Max[0] // 2)
+                else:
+                    create_egg(
+                        lv_game,
+                        egg_inf,
+                        ck_inf,
+                        boss_mode,
+                        tuple(boss_pos) if boss_mode else None,
+                        big_egg_inf,
+                    )
 
             elif event.type == countdown:
 
@@ -1236,6 +1253,12 @@ def loop_playing(screen, load=None, difficulty=None):
 
                 stage_clear = True
 
+        elif meteor_mode:
+
+            if count <= 0:
+
+                stage_clear = True
+
         else:
 
             if (
@@ -1280,7 +1303,7 @@ def loop_playing(screen, load=None, difficulty=None):
 
             break
 
-        if count <= 0 or hp <= 0:
+        if (not meteor_mode and count <= 0) or hp <= 0:
 
             screen_show_mess(screen, 'YOU LOSE')
 
