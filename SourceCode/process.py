@@ -2,7 +2,11 @@ import math
 import random
 from sys import exit
 from var import *
+from particles import ParticleManager
 import os
+import random
+import math
+import pygame
 
 
 def create_game(name):
@@ -24,163 +28,213 @@ def create_game(name):
 
 # ================= SAVE FILE =================
 
-def w_file(
-    lv_game,
-    lv_gun,
-    score,
-    hp,
-    gift_rays=0,
-    difficulty=2,
-    missiles=0,
-    skin_index=0,
-    ammo=None,
-):
-
-    if ammo is None:
-        ammo = starting_ammo(2)
-
-    path = save_file_path()
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-
-    data = [
-        f"{lv_game}\n",
-        f"{lv_gun}\n",
-        f"{score}\n",
-        f"{hp}\n",
-        f"{gift_rays}\n",
-        f"{difficulty}\n",
-        f"{missiles}\n",
-        f"{skin_index}\n",
-        f"{ammo}\n",
-    ]
-
-    with open(path, 'w') as file:
-        file.writelines(data)
-
-
-def r_file():
-
-    path = save_file_path()
-
-    if not os.path.exists(path):
-        w_file(1, 1, 0, 5, 0, 2, 0, 0, starting_ammo(2))
-        return [1, 1, 0, 5, 0, 2, 0, 0, starting_ammo(2)]
-
-    x = []
-
-    with open(path) as file:
-
-        for line in file:
-
-            line = line.strip()
-
-            if line != '':
-                x.append(int(line))
-
-    if len(x) == 4:
-        x.extend([0, 2, 0, 0, starting_ammo(2)])
-        w_file(x[0], x[1], x[2], x[3], x[4], x[5], x[6], x[7], x[8])
-    elif len(x) == 6:
-        x.extend([0, 0, starting_ammo(2)])
-        w_file(x[0], x[1], x[2], x[3], x[4], x[5], x[6], x[7], x[8])
-    elif len(x) == 8:
-        x.append(starting_ammo(x[5] if x[5] in (1, 2, 3) else 2))
-        w_file(x[0], x[1], x[2], x[3], x[4], x[5], x[6], x[7], x[8])
-    elif len(x) != 9:
-        w_file(1, 1, 0, 5, 0, 2, 0, 0, starting_ammo(2))
-        return [1, 1, 0, 5, 0, 2, 0, 0, starting_ammo(2)]
-
-    return x
-
-
-# ================= HIGH SCORES =================
+# Using w_file and r_file from var.py
 
 
 def read_highscores():
-
     path = highscores_file_path()
-
-    if not os.path.isfile(path):
+    if not os.path.exists(path):
         return []
-
-    scores = []
-
-    with open(path) as file:
-
-        for line in file:
-
-            line = line.strip()
-
-            if line.isdigit():
-                scores.append(int(line))
-
-    return scores
-
-
-def write_highscores(scores):
-
-    path = highscores_file_path()
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-
-    with open(path, 'w') as file:
-
-        for s in scores:
-            file.write(f"{s}\n")
+    try:
+        with open(path, 'r') as f:
+            return sorted([int(line.strip()) for line in f if line.strip()], reverse=True)
+    except:
+        return []
 
 
 def record_high_score(score):
-
     scores = read_highscores()
     scores.append(score)
-    scores = sorted(scores, reverse=True)[:10]
-    write_highscores(scores)
+    scores.sort(reverse=True)
+    path = highscores_file_path()
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, 'w') as f:
+        for s in scores[:10]:
+            f.write(f"{s}\n")
 
 
+def add_pos_menu(obj_menu):
+    sw = 1366 # Default screen width
+    new_arr = [[obj_menu[0], (sw // 2 - obj_menu[0].get_width() // 2, 80)]]
+    pos_y = 300
+    for i in range(1, len(obj_menu)):
+        new_arr.append([obj_menu[i], (sw // 2 - obj_menu[i].get_width() // 2, pos_y)])
+        pos_y += 85
+    return new_arr
+
+
+def create_menu(screen, menu, highlight_color=(255, 215, 0), shadow=False):
+    """Render a menu with optional highlight color and shadow effect.
+
+    Args:
+        screen: Pygame display surface.
+        menu: List of menu items (surfaces).
+        highlight_color: RGB tuple for the selected item background.
+        shadow: Bool to draw a shadow behind the highlighted rectangle.
+    Returns:
+        The index of the selected menu item.
+    """
+    obj = add_pos_menu(menu)
+    bg = get_img('bg')
+    signal = text('>>>', 50, 'White')
+    fps = pygame.time.Clock()
+    select = 1
+    click_sound = pygame.mixer.Sound(all_music()['shoot'])
+    click_sound.set_volume(0.1)
+    
+    while True:
+        fps.tick(30)
+        screen.blit(bg, (0, 0))
+        
+        # Draw menu items with highlight and shadow
+        for idx, (surf, pos) in enumerate(obj):
+            rect = pygame.Rect(pos[0]-20, pos[1]-10, surf.get_width()+40, surf.get_height()+20)
+            
+            if idx == select:
+                # [UPGRADE] Pulse animation for selected item
+                scale = 1.0 + 0.05 * math.sin(pygame.time.get_ticks() * 0.01)
+                item_surf = pygame.transform.rotozoom(surf, 0, scale)
+                item_rect = item_surf.get_rect(center=(pos[0] + surf.get_width()//2, pos[1] + surf.get_height()//2))
+                
+                pygame.draw.rect(screen, highlight_color, rect, border_radius=18)
+                if shadow:
+                    shadow_rect = rect.move(4, 4)
+                    pygame.draw.rect(screen, (0,0,0,80), shadow_rect, border_radius=18)
+                screen.blit(item_surf, item_rect)
+            else:
+                pygame.draw.rect(screen, (0,0,0,60), rect, border_radius=18)
+                screen.blit(surf, pos)
+                
+        # Draw selector
+        screen.blit(signal, (obj[select][1][0] - 80, obj[select][1][1]))
+        pygame.display.update()
+        
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                close()
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_DOWN and select < len(menu) - 1:
+                    select += 1
+                    click_sound.play()
+                elif event.key == pygame.K_UP and select > 1:
+                    select -= 1
+                    click_sound.play()
+                elif event.key == pygame.K_RETURN:
+                    return select
+
+# Tách lại hàm highscores_menu
 def highscores_menu(screen):
-
     bg = get_img('bg')
     fps = pygame.time.Clock()
-
+    # Use a system font to avoid font rendering issues (e.g. VT323 doesn't support some chars)
+    font_name = 'segoe ui,tahoma,arial'
+    score_font = pygame.font.SysFont(font_name, 45, bold=True)
+    title_font = pygame.font.SysFont(font_name, 100, bold=True)
+    
     while True:
-
         fps.tick(30)
-
         screen.blit(bg, (0, 0))
-
         scores = read_highscores()
-
-        screen.blit(text('HIGH SCORES', 100, 'Red'), (450, 80))
-
+        
+        title_surf = title_font.render('HIGH SCORES', True, (255, 0, 0))
+        screen.blit(title_surf, (450, 80))
+        
         y = 220
-
         for i, s in enumerate(scores[:10]):
-
-            screen.blit(text(f'{i + 1}. {s}', 45, 'Yellow'), (520, y))
-
+            txt = score_font.render(f'{i + 1}. {s}', True, (255, 255, 0))
+            screen.blit(txt, (520, y))
             y += 45
-
         if not scores:
-
             screen.blit(text('No scores yet', 40, 'Gray'), (520, 280))
-
         screen.blit(
             text('Press ENTER or ESC to return', 35, 'White'),
             (480, 680),
         )
-
         pygame.display.update()
-
         for event in pygame.event.get():
-
             if event.type == pygame.QUIT:
                 close()
-
             elif event.type == pygame.KEYDOWN:
-
                 if event.key in (pygame.K_RETURN, pygame.K_ESCAPE):
-
                     return
 
+def shop_menu(screen):
+    bg = get_img('bg')
+    fps = pygame.time.Clock()
+    f_name = 'segoe ui,tahoma,arial'
+    title_font = pygame.font.SysFont(f_name, 70, bold=True)
+    item_font = pygame.font.SysFont(f_name, 30, bold=True)
+    info_font = pygame.font.SysFont(f_name, 22)
+    
+    while True:
+        fps.tick(30)
+        data = r_file()
+        motors = data[9]
+        upgrades = [
+            {'name': "TỐC ĐỘ ĐỘNG CƠ", 'lv': data[10], 'cost': upgrade_costs(data[10]), 'idx': 10, 'color': (0, 200, 255), 'desc': "Bay nhanh hơn & linh hoạt hơn"},
+            {'name': "MÁU TỐI ĐA", 'lv': data[11], 'cost': upgrade_costs(data[11]), 'idx': 11, 'color': (255, 100, 100), 'desc': "Thêm máu tối đa và máu khởi đầu"},
+            {'name': "HỒI TÊN LỬA", 'lv': data[12], 'cost': upgrade_costs(data[12]), 'idx': 12, 'color': (255, 200, 0), 'desc': "Nạp lại tên lửa nhanh hơn"}
+        ]
+        
+        screen.blit(bg, (0, 0))
+        overlay = pygame.Surface(screen.get_size(), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 150))
+        screen.blit(overlay, (0, 0))
+        
+        title = title_font.render('CỬA HÀNG NÂNG CẤP', True, (255, 255, 255))
+        screen.blit(title, (screen.get_width()//2 - title.get_width()//2, 40))
+        
+        motor_txt = item_font.render(f"SỐ ĐỘNG CƠ HIỆN CÓ: {motors}", True, (255, 215, 0))
+        screen.blit(motor_txt, (screen.get_width()//2 - motor_txt.get_width()//2, 120))
+        
+        mx, my = pygame.mouse.get_pos()
+        click = pygame.mouse.get_pressed()[0]
+        
+        for i, upg in enumerate(upgrades):
+            rect = pygame.Rect(screen.get_width()//2 - 400, 180 + i * 140, 800, 120)
+            is_hover = rect.collidepoint(mx, my)
+            
+            pygame.draw.rect(screen, (30, 30, 40), rect, border_radius=15)
+            pygame.draw.rect(screen, (255, 255, 255) if is_hover else (100, 100, 100), rect, 2, border_radius=15)
+            pygame.draw.rect(screen, upg['color'], (rect.x + 20, rect.y + 20, 80, 80), border_radius=10)
+            
+            name_surf = item_font.render(f"{upg['name']} (Cấp {upg['lv']}) - Giá: {upg['cost']}", True, (255, 255, 255))
+            screen.blit(name_surf, (rect.x + 120, rect.y + 25))
+            desc_surf = info_font.render(upg['desc'], True, (180, 180, 180))
+            screen.blit(desc_surf, (rect.x + 120, rect.y + 65))
+            
+            btn_rect = pygame.Rect(rect.right - 180, rect.y + 35, 150, 50)
+            btn_hover = btn_rect.collidepoint(mx, my)
+            can_afford = motors >= upg['cost']
+            
+            btn_col = (0, 255, 100) if can_afford else (150, 50, 50)
+            if btn_hover and can_afford: btn_col = (50, 255, 150)
+            
+            pygame.draw.rect(screen, btn_col, btn_rect, border_radius=10)
+            if can_afford:
+                buy_text = f"MUA: {upg['cost']}"
+            else:
+                buy_text = f"THIẾU: {upg['cost'] - motors}"
+            
+            buy_surf = item_font.render(buy_text, True, (0, 0, 0))
+            screen.blit(buy_surf, (btn_rect.centerx - buy_surf.get_width()//2, btn_rect.centery - buy_surf.get_height()//2))
+            
+            if click and btn_hover and can_afford:
+                data[9] -= upg['cost']
+                data[upg['idx']] += 1
+                w_file(*data)
+                pygame.time.delay(200)
+        
+        back_btn = pygame.Rect(screen.get_width()//2 - 100, 650, 200, 50)
+        back_hover = back_btn.collidepoint(mx, my)
+        pygame.draw.rect(screen, (200, 200, 200) if back_hover else (100, 100, 100), back_btn, border_radius=10)
+        back_txt = item_font.render("QUAY LẠI", True, (0, 0, 0))
+        screen.blit(back_txt, (back_btn.centerx - back_txt.get_width()//2, back_btn.centery - back_txt.get_height()//2))
+        
+        if (click and back_hover) or pygame.key.get_pressed()[pygame.K_ESCAPE]: return
+        pygame.display.update()
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT: close()
 
 def hangar_menu(screen):
 
@@ -499,32 +553,31 @@ def collision(inf_1, inf_2):
 
 # ================= UI =================
 
-def show_score_hp(screen, score, hp, rays_per_shot=None,
+def show_score_hp(screen, score, motors, hp, rays_per_shot=None,
                    ammo=None, missiles=None):
 
-    score_text = text(f"x{score}", 50, 'Yellow')
+    motor_img = get_img('motor')
+    hp_img = get_img('hp')
+    
+    screen.blit(motor_img, (20, 5))
+    motor_text = text(f"x{motors}", 50, 'Yellow')
+    screen.blit(motor_text, (85, 5))
+    
+    screen.blit(hp_img, (20, 65))
     hp_text = text(f"x{hp}", 50, 'Brown')
-
-    screen.blit(score_text, (50, 0))
-    screen.blit(hp_text, (50, 60))
+    screen.blit(hp_text, (85, 65))
 
     if ammo is not None:
-
-        atxt = text(f"Dan x{ammo}", 44, 'White')
-
-        screen.blit(atxt, (50, 118))
+        atxt = text(f"Đạn: {ammo}", 40, 'White')
+        screen.blit(atxt, (50, 130))
 
     if rays_per_shot is not None:
-
-        ray_text = text(f"Tia/lan: x{rays_per_shot}", 38, 'Cyan')
-
-        screen.blit(ray_text, (50, 168))
+        ray_text = text(f"Số tia: {rays_per_shot}", 35, 'Cyan')
+        screen.blit(ray_text, (50, 175))
 
     if missiles is not None:
-
-        mtxt = text(f"Ten lua duoi x{missiles}", 36, 'Orange')
-
-        screen.blit(mtxt, (50, 216))
+        mtxt = text(f"Tên lửa: {missiles}", 35, 'Orange')
+        screen.blit(mtxt, (50, 220))
 
 
 def screen_show_mess(screen, string):
@@ -544,7 +597,10 @@ def screen_playing(screen, obj, pl_inf, ck_inf,
                    score, hp, time, rays_per_shot=None,
                    boss_draw=None, missile_inf=None,
                    big_egg_inf=None, missiles_left=None,
-                   ammo=None, hit_bursts=None):
+                   ammo=None, hit_bursts=None,
+                   gift_rays_timer=0, shield_timer=0,
+                   ship_tilt=0, muzzle_flash=0,
+                   ultimate_energy=0, feathers=0):
 
     for i, j in obj:
         screen.blit(i, j)
@@ -595,11 +651,32 @@ def screen_playing(screen, obj, pl_inf, ck_inf,
         for i in big_egg_inf['pos']:
             screen.blit(big_egg_inf['img'], i)
 
-    for i in score_inf['pos']:
-        screen.blit(score_inf['img'], i)
+    motor_img = get_img('motor')
+    for i in range(len(score_inf['pos'])):
+        screen.blit(motor_img, score_inf['pos'][i])
 
-    for i in gift_inf['pos']:
-        screen.blit(gift_inf['img'], i)
+    motor_img = get_img('motor')
+    for i in range(len(gift_inf['pos'])):
+        pos = gift_inf['pos'][i]
+        g_type = gift_inf['types'][i] if i < len(gift_inf['types']) else None
+        
+        if g_type == 'motor':
+            screen.blit(motor_img, pos)
+        else:
+            screen.blit(gift_inf['img'], pos)
+        
+        # [UPGRADE] Visual indicator for gift type
+        if g_type:
+            g_type = gift_inf['types'][i]
+            colors = {
+                'rays': (0, 255, 255),
+                'shield': (100, 200, 255),
+                'ammo': (255, 255, 255),
+                'hp': (255, 100, 100)
+            }
+            color = colors.get(g_type, (255, 255, 0))
+            # Draw a glowing ring
+            pygame.draw.circle(screen, color, (int(pos[0] + 25), int(pos[1] + 25)), 32, 3)
 
     if hit_bursts:
 
@@ -608,96 +685,67 @@ def screen_playing(screen, obj, pl_inf, ck_inf,
     show_score_hp(
         screen,
         score,
+        feathers,
         hp,
         rays_per_shot,
         ammo,
         missiles_left,
     )
+    
+    # [UPGRADE] Currency display
+    screen.blit(text(f"Động cơ (Tổng): {feathers}", 30, (255, 215, 0)), (50, 265))
+
+    # [UPGRADE] Power-up HUD
+    py_y = 305
+    if gift_rays_timer > 0:
+        screen.blit(text(f"Tăng tia: {gift_rays_timer//60}s", 30, 'Cyan'), (50, py_y))
+        py_y += 35
+    if shield_timer > 0:
+        screen.blit(text(f"Bất tử: {shield_timer//60}s", 30, (100, 200, 255)), (50, py_y))
+        py_y += 35
+
+    # [UPGRADE] Ultimate Energy Bar
+    energy_color = (255, 100, 255) if ultimate_energy < 100 else (255, 255, 0)
+    pygame.draw.rect(screen, (50, 50, 50), (50, py_y + 10, 150, 15))
+    pygame.draw.rect(screen, energy_color, (50, py_y + 10, 150 * (ultimate_energy/100), 15))
+    screen.blit(text("CHIÊU CUỐI", 24, energy_color), (50, py_y + 28))
+    if ultimate_energy >= 100:
+        screen.blit(text("SẴN SÀNG! (SPACE)", 22, (255, 255, 255)), (50, py_y + 50))
 
     screen.blit(
-        text(f"Time remaining: {time}", 30, 'Red'),
+        text(f"Thời gian: {time}", 30, 'Red'),
         (1100, 700)
     )
 
-    screen.blit(
-        pl_inf['img'],
-        pl_inf['pos'][0]
-    )
+    # [UPGRADE] Draw Shield Effect
+    if shield_timer > 0:
+        px, py = pl_inf['pos'][0]
+        sw, sh = pl_inf['img'].get_size()
+        # Blink when expiring
+        if shield_timer > 120 or (pygame.time.get_ticks() // 200) % 2 == 0:
+            pygame.draw.circle(screen, (100, 200, 255), (px + sw//2, py + sh//2), sw, 3)
+            # Add some inner glow
+            pygame.draw.circle(screen, (100, 200, 255), (px + sw//2, py + sh//2), sw - 5, 1)
+
+    # [UPGRADE] Ship Tilting Visualization
+    ship_img = pl_inf['img']
+    if abs(ship_tilt) > 1:
+        angle = -ship_tilt * 0.8 # Invert tilt for natural feel
+        angle = max(-25, min(25, angle))
+        ship_img = pygame.transform.rotate(pl_inf['img'], angle)
+    
+    ship_rect = ship_img.get_rect(center=(pl_inf['pos'][0][0] + pl_inf['img'].get_width()//2, pl_inf['pos'][0][1] + pl_inf['img'].get_height()//2))
+    screen.blit(ship_img, ship_rect)
+    
+    # [UPGRADE] Muzzle Flash
+    if muzzle_flash > 0:
+        # Small bright burst at the tip of the ship
+        flash_pos = (pl_inf['pos'][0][0] + pl_inf['img'].get_width()//2, pl_inf['pos'][0][1] - 5)
+        pygame.draw.circle(screen, (255, 255, 200), flash_pos, random.randint(8, 15))
+        pygame.draw.circle(screen, (255, 255, 255), flash_pos, random.randint(4, 8))
 
     pygame.display.update()
 
-
-# ================= MENU =================
-
-def add_pos_menu(obj_menu):
-
-    new_arr = [[obj_menu[0], (500, 100)]]
-
-    pos_y = 350
-
-    for i in range(1, len(obj_menu)):
-
-        new_arr.append(
-            [obj_menu[i], (600, pos_y)]
-        )
-
-        pos_y += 100
-
-    return new_arr
-
-
-def create_menu(screen, menu):
-
-    obj = add_pos_menu(menu)
-
-    bg = get_img('bg')
-
-    signal = text('>>>', 50, 'White')
-
-    pos_sgn = (
-        obj[1][1][0] - 80,
-        obj[1][1][1]
-    )
-
-    fps = pygame.time.Clock()
-
-    select = 1
-
-    while True:
-
-        fps.tick(15)
-
-        screen.blit(bg, (0, 0))
-
-        screen.blit(signal, pos_sgn)
-
-        for i, j in obj:
-            screen.blit(i, j)
-
-        pygame.display.update()
-
-        for event in pygame.event.get():
-
-            if event.type == pygame.QUIT:
-                close()
-
-        key = pygame.key.get_pressed()
-
-        if key[pygame.K_DOWN] and select < len(menu) - 1:
-
-            select += 1
-
-            pos_sgn = change_pos(pos_sgn, (0, 100))
-
-        elif key[pygame.K_UP] and select > 1:
-
-            select -= 1
-
-            pos_sgn = change_pos(pos_sgn, (0, -100))
-
-        elif key[pygame.K_RETURN]:
-
-            return select
 
 
 # ================= CREATE OBJECT =================
@@ -755,11 +803,31 @@ def _laser_shot_offsets(num_ray):
     return patterns.get(n, patterns[6])
 
 
-def create_laser(num_ray, ls_inf, pl_inf, sound):
+def create_laser(num_ray, ls_inf, pl_inf, sound, offset_x=0):
+    px, py = pl_inf['pos'][0]
+    pw, ph = pl_inf['img'].get_size()
+    
+    # [UPGRADE] Shift base position for ultimate storm
+    px += offset_x
 
-    for off in _laser_shot_offsets(num_ray):
-
-        ls_inf['pos'].append(change_pos(pl_inf['pos'][0], off))
+    if num_ray == 1:
+        ls_inf['pos'].append((px + pw // 2 - 4, py))
+    elif num_ray == 2:
+        ls_inf['pos'].append((px + 5, py + 20))
+        ls_inf['pos'].append((px + pw - 13, py + 20))
+    elif num_ray == 3:
+        ls_inf['pos'].append((px + 5, py + 20))
+        ls_inf['pos'].append((px + pw // 2 - 4, py))
+        ls_inf['pos'].append((px + pw - 13, py + 20))
+    elif num_ray >= 4:
+        # Fan out for high levels
+        ls_inf['pos'].append((px + 5, py + 20))
+        ls_inf['pos'].append((px + pw // 2 - 4, py - 5))
+        ls_inf['pos'].append((px + pw - 13, py + 20))
+        ls_inf['pos'].append((px + pw // 2 - 4, py + 15))
+        if num_ray >= 6:
+            ls_inf['pos'].append((px - 10, py + 30))
+            ls_inf['pos'].append((px + pw + 2, py + 30))
 
     sound.play()
 
@@ -857,34 +925,41 @@ def move_eggs(inf, fall_y=2, horiz=1):
 # ================= REMOVE OBJECT =================
 
 def out_screen(inf, size_screen):
-
-    inf['pos'] = [
-        pos for pos in inf['pos']
-        if 0 <= pos[0] <= size_screen[0]
-        and 0 <= pos[1] <= size_screen[1]
-    ]
+    new_pos = []
+    new_types = []
+    
+    for i in range(len(inf['pos'])):
+        pos = inf['pos'][i]
+        if 0 <= pos[0] <= size_screen[0] and 0 <= pos[1] <= size_screen[1]:
+            new_pos.append(pos)
+            if 'types' in inf and i < len(inf['types']):
+                new_types.append(inf['types'][i])
+                
+    inf['pos'] = new_pos
+    if 'types' in inf:
+        inf['types'] = new_types
 
 
 def out_screen_egg(level, inf, size_screen):
 
     new_pos = []
     new_direct = []
+    new_types = []
 
     for i in range(len(inf['pos'])):
-
         pos = inf['pos'][i]
-
         if -200 <= pos[0] <= size_screen[0] + 200 and -300 <= pos[1] <= size_screen[1] + 200:
-
             new_pos.append(pos)
-
-            if level > 3:
+            if 'direct' in inf and i < len(inf['direct']):
                 new_direct.append(inf['direct'][i])
+            if 'types' in inf and i < len(inf['types']):
+                new_types.append(inf['types'][i])
 
     inf['pos'] = new_pos
-
-    if level > 3:
+    if 'direct' in inf:
         inf['direct'] = new_direct
+    if 'types' in inf:
+        inf['types'] = new_types
 
 
 # ================= DIFFICULTY =================
@@ -924,6 +999,42 @@ def egg_fall_speed(lv_game):
 # ================= MAIN GAME =================
 
 
+particle_manager = ParticleManager()
+
+# Optimized Star layer configuration
+STAR_LAYERS = [
+    {'color': (40, 40, 60), 'speed': 0.1, 'stars': [], 'size': 3}, 
+    {'color': (120, 120, 150), 'speed': 0.3, 'stars': [], 'size': 1}, 
+    {'color': (180, 180, 220), 'speed': 0.6, 'stars': [], 'size': 2}, 
+    {'color': (255, 255, 255), 'speed': 1.2, 'stars': [], 'size': 2}, 
+]
+
+def init_star_layers(width, height, count=100):
+    for i, layer in enumerate(STAR_LAYERS):
+        layer['stars'] = []
+        c = count // (i + 1) # Progressive count reduction
+        for _ in range(c):
+            x = random.randint(0, width)
+            y = random.randint(0, height)
+            layer['stars'].append([x, y])
+
+def draw_parallax_background(screen, width, height):
+    for layer in STAR_LAYERS:
+        for star in layer['stars']:
+            pygame.draw.circle(screen, layer['color'], (int(star[0]), int(star[1])), layer['size'])
+            star[1] += layer['speed'] # Vertical scroll
+            if star[1] > height:
+                star[1] = 0
+                star[0] = random.randint(0, width)
+
+def health_bar(surface, x, y, hp, max_hp, width=200, height=20):
+    ratio = max(0, hp) / max(1, max_hp)
+    pygame.draw.rect(surface, (80, 0, 0), (x, y, width, height))
+    pygame.draw.rect(surface, (200, 0, 0), (x, y, int(width * ratio), height))
+
+def apply_screen_shake(offset, magnitude=5):
+    return (random.randint(-magnitude, magnitude), random.randint(-magnitude, magnitude))
+
 def loop_playing(screen, load=None, difficulty=None):
 
     if load is None:
@@ -945,9 +1056,35 @@ def loop_playing(screen, load=None, difficulty=None):
         load = load + [0, 0, starting_ammo(2)]
 
     elif len(load) == 8:
-
         load.append(starting_ammo(load[5] if load[5] in (1, 2, 3) else 2))
 
+    # Ammo now persists across levels as requested
+
+def game_over_screen(screen, score):
+    bg = get_img('bg')
+    f_name = 'segoe ui,tahoma,arial'
+    font_title = pygame.font.SysFont(f_name, 100, bold=True)
+    font_msg = pygame.font.SysFont(f_name, 50)
+    
+    while True:
+        screen.blit(bg, (0, 0))
+        title = font_title.render("TRÒ CHƠI KẾT THÚC", True, (255, 0, 0))
+        screen.blit(title, (screen.get_width()//2 - title.get_width()//2, 200))
+        
+        score_txt = font_msg.render(f"ĐIỂM CỦA BẠN: {score}", True, (255, 255, 255))
+        screen.blit(score_txt, (screen.get_width()//2 - score_txt.get_width()//2, 350))
+        
+        hint = font_msg.render("Nhấn phím bất kỳ để quay lại", True, (200, 200, 200))
+        screen.blit(hint, (screen.get_width()//2 - hint.get_width()//2, 500))
+        
+        pygame.display.update()
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT: close()
+            if event.type == pygame.KEYDOWN or event.type == pygame.MOUSEBUTTONDOWN:
+                return
+
+def loop_playing(screen, load_inf=None, difficulty=None):
+    load = load_inf
     (
         lv_game,
         lv_gun,
@@ -1037,6 +1174,7 @@ def loop_playing(screen, load=None, difficulty=None):
     score_inf = sc_inf()
 
     gift_inf = gift_pickup_inf()
+    gift_inf['types'] = [] # Store types: 'rays', 'shield', 'ammo', 'hp'
 
     missile_inf = missile_weapon_inf()
 
@@ -1079,6 +1217,35 @@ def loop_playing(screen, load=None, difficulty=None):
         game[lv_game][num_create_ck] -= 1
 
     size_player = pl_inf['img'].get_size()
+    # Initialize star layers once per level
+    init_star_layers(*screen.get_size(), count=80)
+    shake_timer = 0
+    
+    # [UPGRADE] Premium features initialization
+    player_target_pos = list(pl_inf['pos'][0])
+    player_current_pos = list(pl_inf['pos'][0])
+    
+    # Load Upgrades
+    u_data = r_file()
+    motors_collected = u_data[9]
+    stats = get_stat_bonus(u_data[10], u_data[11], u_data[12])
+    hp = min(hp + stats['max_hp_bonus'], 5 + stats['max_hp_bonus'])
+    
+    invincibility_timer = 0
+    level_up_msg_timer = 0
+    muzzle_flash_timer = 0
+    ultimate_energy = 0
+    ultimate_storm_timer = 0
+    missile_timer = 0
+    screen_shake = 0
+    level_up_font = pygame.font.SysFont('Arial', 80, bold=True)
+    
+    # [UPGRADE] Timed Power-ups
+    gift_rays_timer = 0
+    shield_timer = 0
+    shield_font = pygame.font.SysFont('Arial', 30, bold=True)
+    
+    shoot_cooldown = 0 # Rapid fire cooldown
 
     laser_sound = load_music(music['shoot'], 0.05)
 
@@ -1095,8 +1262,8 @@ def loop_playing(screen, load=None, difficulty=None):
     )
 
     if boss_mode:
-
-        egg_ms = max(95, egg_ms // 3)
+        # [UPGRADE] Slower boss attack speed (was egg_ms // 3)
+        egg_ms = max(180, egg_ms // 1.5)
 
     elif meteor_mode:
 
@@ -1158,6 +1325,14 @@ def loop_playing(screen, load=None, difficulty=None):
                 'img': boss_img,
             }
 
+        # Apply screen shake offset if active
+        offset = (0, 0)
+        if shake_timer > 0:
+            offset = apply_screen_shake(offset)
+            shake_timer -= 1
+        # Draw parallax background first
+        draw_parallax_background(screen, *screen.get_size())
+        
         screen_playing(
             screen,
             obj,
@@ -1177,7 +1352,78 @@ def loop_playing(screen, load=None, difficulty=None):
             missiles,
             ammo,
             hit_bursts,
+            gift_rays_timer,
+            shield_timer,
+            (player_target_pos[0] - player_current_pos[0]), # ship_tilt velocity
+            muzzle_flash_timer,
+            ultimate_energy,
+            motors_collected
         )
+        
+        # [UPGRADE] Cooldowns logic
+        if missile_timer > 0:
+            missile_timer -= 1
+        
+        if muzzle_flash_timer > 0:
+            muzzle_flash_timer -= 1
+        
+        if ultimate_storm_timer > 0:
+            ultimate_storm_timer -= 1
+            screen_shake = random.randint(2, 6) # Constant vibration
+            # Random lasers for Laser Storm
+            if ultimate_storm_timer % 3 == 0:
+                create_laser(random.randint(2, 4), ls_inf, pl_inf, laser_sound, offset_x=random.randint(-200, 200))
+        if gift_rays_timer > 0:
+            gift_rays_timer -= 1
+            if gift_rays_timer == 0:
+                gift_rays = 0
+        
+        if shield_timer > 0:
+            shield_timer -= 1
+        
+        # [UPGRADE] Draw Level Up message
+        if level_up_msg_timer > 0:
+            level_up_msg_timer -= 1
+            msg_surf = level_up_font.render("WEAPON UPGRADED!", True, (0, 255, 255))
+            msg_rect = msg_surf.get_rect(center=(screen.get_width()//2, screen.get_height()//2 - 100))
+            # Pulse effect
+            s_val = 1.0 + 0.1 * math.sin(pygame.time.get_ticks() * 0.01)
+            scaled_msg = pygame.transform.rotozoom(msg_surf, 0, s_val)
+            screen.blit(scaled_msg, scaled_msg.get_rect(center=msg_rect.center))
+            
+        # [UPGRADE] Visual feedback for invincibility (blink)
+        if invincibility_timer > 0:
+            invincibility_timer -= 1
+            if (pygame.time.get_ticks() // 100) % 2 == 0:
+                # Skip drawing or draw with alpha if we had an alpha-capable blit here, 
+                # but for simplicity we blink the whole ship draw later in screen_playing or here.
+                pass 
+        # Apply offset after drawing all objects
+        if offset != (0, 0):
+            screen.blit(screen, offset)
+        # Draw health bar overlay
+        health_bar(screen, 50, 10, hp, 5 + stats['max_hp_bonus'], width=150, height=15)
+        # Update particles
+        dt = fps.get_time() / 1000.0
+        particle_manager.update(dt)
+        particle_manager.draw(screen)
+
+
+        # [AUTO-FIRE] Rapid fire when holding mouse button
+        if pygame.mouse.get_pressed()[0]:
+            if shoot_cooldown <= 0 and ammo > 0:
+                create_laser(
+                    rays_this_shot(),
+                    ls_inf,
+                    pl_inf,
+                    laser_sound
+                )
+                muzzle_flash_timer = 3
+                ammo -= 1
+                shoot_cooldown = 10 # Fire every 10 frames (~6 shots per second)
+        
+        if shoot_cooldown > 0:
+            shoot_cooldown -= 1
 
         for event in pygame.event.get():
 
@@ -1185,7 +1431,7 @@ def loop_playing(screen, load=None, difficulty=None):
                 close()
 
             elif event.type == egg_speed:
-
+                # ... egg creation logic ...
                 if meteor_mode:
                     for _ in range(random.randint(1, 2)):
                         bx = random.choice([random.randint(0, Max[0]), -50, Max[0] + 50])
@@ -1203,55 +1449,43 @@ def loop_playing(screen, load=None, difficulty=None):
                     )
 
             elif event.type == countdown:
-
                 count -= 1
 
             elif event.type == pygame.MOUSEBUTTONDOWN:
-
-                if event.button == 1:
-
-                    if ammo > 0:
-
-                        create_laser(
-                            rays_this_shot(),
-                            ls_inf,
-                            pl_inf,
-                            laser_sound
-                        )
-
-                        ammo -= 1
-
-                elif event.button == 3 and missiles > 0:
-
-                    sx = float(
-                        pl_inf['pos'][0][0] + size_player[0] // 2 - 13
-                    )
-
+                # [UPGRADE] Missile with Cooldown (Right Click)
+                if event.button == 3 and missiles > 0 and missile_timer <= 0:
+                    sx = float(pl_inf['pos'][0][0] + size_player[0] // 2 - 13)
                     sy = float(pl_inf['pos'][0][1])
-
                     missile_inf['items'].append({'x': sx, 'y': sy})
-
                     missiles -= 1
+                    missile_timer = int(90 * (1.0 - stats['missile_cd_red']))
 
             elif event.type == pygame.KEYDOWN:
 
                 if event.key == pygame.K_ESCAPE:
-
                     choose = create_menu(
                         screen,
                         menu_pause()
                     )
 
-                    if choose == 2:
+                    if choose == 2: # Reload
                         break
+                    elif choose == 3: # Main Menu
+                        return
+
+                elif event.key == pygame.K_SPACE and ultimate_energy >= 100:
+                    ultimate_energy = 0
+                    ultimate_storm_timer = 240 # 4 seconds of Laser Storm
+                    screen_shake = 30
+                    show_popup(screen, "ULTIMATE!", "LASER STORM ACTIVATED!")
 
         stage_clear = False
 
         if boss_mode:
 
             if boss_hp <= 0:
-
                 stage_clear = True
+                motors_collected += 50 # Boss gives 50 motors!
 
         elif meteor_mode:
 
@@ -1270,9 +1504,16 @@ def loop_playing(screen, load=None, difficulty=None):
                 stage_clear = True
 
         if stage_clear:
+            if boss_mode:
+                screen_show_mess(screen, "CHIẾN THẮNG BOSS! CHÚC MỪNG BẠN!")
+                pygame.time.delay(3000)
+            else:
+                screen_show_mess(screen, f"HOÀN THÀNH MÀN {lv_game}!")
+                pygame.time.delay(1500)
 
             lv_game += 1
-
+            # [UPGRADE] Ammo bonus for clearing stage
+            ammo += (25 + lv_game * 5)
             w_file(
                 lv_game,
                 lv_gun,
@@ -1283,7 +1524,10 @@ def loop_playing(screen, load=None, difficulty=None):
                 missiles,
                 skin_index,
                 ammo,
+                motors_collected,
+                u_data[10], u_data[11], u_data[12]
             )
+            return True
 
             load = [
                 lv_game,
@@ -1333,39 +1577,25 @@ def loop_playing(screen, load=None, difficulty=None):
             lv_gun < len(gun) - 1
             and score >= gun[lv_gun][req_score_gun]
         ):
-
             lv_gun += 1
+            # [UPGRADE] Trigger level up visual
+            level_up_msg_timer = 120
+            collision_sound.play() # Reuse sound for feedback
 
         if boss_mode and boss_hp > 0 and boss_img is not None:
-
             bw = boss_img.get_width()
-
             boss_pos[0] += boss_vx
-
             if boss_pos[0] < 35 or boss_pos[0] > Max[0] - bw - 35:
-
                 boss_vx *= -1
-
-            boss_pos[1] = 84 + int(
-                52 * math.sin(pygame.time.get_ticks() * 0.0028)
-            )
-
+            boss_pos[1] = 84 + int(52 * math.sin(pygame.time.get_ticks() * 0.0028))
         if not boss_mode:
-
             if lv_game > 3:
-
                 move_ck(ck_inf, ck_step)
-
                 move_eggs(egg_inf, egg_dy, egg_horiz)
-
             else:
-
                 move(egg_dy, egg_inf)
-
         move_eggs(big_egg_inf, big_fall, big_hz)
-
         move(-gun[lv_gun][speed_gun], ls_inf)
-
         step_homing_missiles(
             missile_inf,
             17,
@@ -1375,21 +1605,13 @@ def loop_playing(screen, load=None, difficulty=None):
             boss_img,
             ck_inf,
         )
-
         cull_missiles(missile_inf, Max)
-
         move(1, score_inf)
-
         move(1, gift_inf)
-
         out_screen(ls_inf, Max)
-
         out_screen(score_inf, Max)
-
         out_screen(gift_inf, Max)
-
         out_screen_egg(lv_game, egg_inf, Max)
-
         out_screen_egg(lv_game, big_egg_inf, Max)
 
         if boss_mode and boss_hp > 0 and boss_img is not None:
@@ -1406,10 +1628,15 @@ def loop_playing(screen, load=None, difficulty=None):
                 ls_inf['rect'].topleft = ls_inf['pos'][li]
 
                 if ls_inf['rect'].colliderect(br):
-
                     boom_sound.play()
-
+                    # explosion particles at chicken death
+                    ck_pos = (boss_pos[0] + bw // 2, boss_pos[1] + boss_img.get_height() // 2)
+                    particle_manager.emit(ck_pos, color=(255, 180, 0), max_radius=30, lifetime=0.4, count=8)
+                    shake_timer = 3
                     boss_hp -= 1
+                    # explosion particles at boss hit
+                    particle_manager.emit((boss_pos[0] + bw // 2, boss_pos[1] + boss_img.get_height() // 2), color=(255, 100, 0), max_radius=40, lifetime=0.6, count=12)
+                    shake_timer = 5
 
                     ls_inf['pos'].pop(li)
 
@@ -1418,48 +1645,49 @@ def loop_playing(screen, load=None, difficulty=None):
                         break
 
         else:
-
             check = collision(ls_inf, ck_inf)
-
             if check is not None:
-
                 boom_sound.play()
-
                 ci = check[1]
-
                 ck_pos = ck_inf['pos'][ci]
-
                 ck_dir = ck_inf['direct'][ci] if lv_game > 3 else False
-
                 kind = roll_chicken_drop(gifts_spawned_stage)
-
+                # Particle effect when hit chicken
+                particle_manager.emit((ck_pos[0]+25, ck_pos[1]+25), color=(255, 220, 80), max_radius=22, lifetime=0.5, count=10)
                 if kind == 'gift':
-
                     gifts_spawned_stage += 1
-
                     gift_inf['pos'].append(ck_pos)
-
+                    gift_inf['types'].append(random.choice(['rays', 'shield', 'ammo', 'hp']))
+                elif kind == 'drumstick':
+                    # [FIX] Spawn motor as a falling gift item
+                    gift_inf['pos'].append(ck_pos)
+                    gift_inf['types'].append('motor')
+                    # Emit small particles for visual feedback
+                    particle_manager.emit(ck_pos, color=(255, 215, 0), count=5)
                 elif kind == 'egg':
-
-                    egg_inf['pos'].append(
-                        change_pos(ck_pos, (10, 50))
-                    )
-
+                    egg_inf['pos'].append(change_pos(ck_pos, (10, 50)))
                     if lv_game > 3:
-
                         egg_inf['direct'].append(ck_dir)
-
                 else:
-
                     score_inf['pos'].append(ck_pos)
-
                 ls_inf['pos'].pop(check[0])
-
                 ck_inf['pos'].pop(ci)
-
                 if lv_game > 3:
-
                     ck_inf['direct'].pop(ci)
+            else:
+                # [UPGRADE] Collision: Lasers vs Meteors
+                check_meteor = collision(ls_inf, big_egg_inf)
+                if check_meteor is not None:
+                    mi = check_meteor[1]
+                    m_pos = big_egg_inf['pos'][mi]
+                    particle_manager.emit(m_pos, color=(150, 150, 150), count=12)
+                    big_egg_inf['pos'].pop(mi)
+                    big_egg_inf['direct'].pop(mi)
+                    ls_inf['pos'].pop(check_meteor[0])
+                    boom_sound.play()
+                    if random.random() < GIFT_DROP_RATE:
+                        gift_inf['pos'].append(m_pos)
+                        gift_inf['types'].append(random.choice(['rays', 'shield', 'ammo', 'hp']))
 
         if missile_inf['items']:
 
@@ -1487,6 +1715,29 @@ def loop_playing(screen, load=None, difficulty=None):
                         missile_inf['items'].pop(mi)
 
                         continue
+                
+                # [UPGRADE] Missile vs Meteors
+                hit_mi = None
+                for b_i in range(len(big_egg_inf['pos'])):
+                    big_egg_inf['rect'].topleft = big_egg_inf['pos'][b_i]
+                    if missile_inf['rect'].colliderect(big_egg_inf['rect']):
+                        hit_mi = b_i
+                        break
+                
+                if hit_mi is not None:
+                    boom_sound.play()
+                    m_pos = big_egg_inf['pos'][hit_mi]
+                    particle_manager.emit(m_pos, color=(150, 150, 150), count=20)
+                    big_egg_inf['pos'].pop(hit_mi)
+                    big_egg_inf['direct'].pop(hit_mi)
+                    missile_inf['items'].pop(mi)
+                    # Gain energy and money from destroying meteors
+                    ultimate_energy = min(100, ultimate_energy + 10)
+                    motors_collected += 8 # Meteors give 8 motors
+                    if random.random() < GIFT_DROP_RATE:
+                        gift_inf['pos'].append(m_pos)
+                        gift_inf['types'].append(random.choice(['rays', 'shield', 'ammo', 'hp']))
+                    continue
 
                 hit_ci = None
 
@@ -1517,6 +1768,7 @@ def loop_playing(screen, load=None, difficulty=None):
                         gifts_spawned_stage += 1
 
                         gift_inf['pos'].append(ck_pos)
+                        gift_inf['types'].append(random.choice(['rays', 'shield', 'ammo', 'hp']))
 
                     elif kind == 'egg':
 
@@ -1565,7 +1817,12 @@ def loop_playing(screen, load=None, difficulty=None):
 
             ammo = max(0, ammo - EGG_AMMO_LOSS)
 
-            hp -= 1
+            if invincibility_timer <= 0 and shield_timer <= 0:
+                hp -= 1
+                invincibility_timer = 60 # ~1 second at 60fps
+                shake_timer = 10
+                # Particle effect for player hit
+                particle_manager.emit(pl_inf['pos'][0], color=(255, 0, 0), count=15)
 
         check = collision(big_egg_inf, pl_inf)
 
@@ -1590,7 +1847,11 @@ def loop_playing(screen, load=None, difficulty=None):
 
             ammo = max(0, ammo - BIG_EGG_AMMO_LOSS)
 
-            hp -= 2
+            if invincibility_timer <= 0 and shield_timer <= 0:
+                hp -= 2
+                invincibility_timer = 90
+                shake_timer = 15
+                particle_manager.emit(pl_inf['pos'][0], color=(255, 50, 0), count=20)
 
         check = collision(score_inf, pl_inf)
 
@@ -1609,14 +1870,32 @@ def loop_playing(screen, load=None, difficulty=None):
             plus_hp = False
 
         check = collision(gift_inf, pl_inf)
-
         if check is not None:
-
-            gift_inf['pos'].pop(check[0])
-
-            gift_rays += 1
-
-            ammo = min(260, ammo + GIFT_AMMO_BONUS)
+            g_idx = check[0]
+            g_type = gift_inf['types'][g_idx]
+            gift_inf['pos'].pop(g_idx)
+            gift_inf['types'].pop(g_idx)
+            
+            # [UPGRADE] Gift handling with stacking timers
+            if g_type == 'rays':
+                gift_rays += 1
+                gift_rays_timer += 600 # Add 10 seconds
+                particle_manager.emit(pl_inf['pos'][0], color=(0, 255, 255), count=15)
+            elif g_type == 'shield':
+                shield_timer += 480 # Add 8 seconds
+                particle_manager.emit(pl_inf['pos'][0], color=(100, 200, 255), count=15)
+            elif g_type == 'ammo':
+                ammo += GIFT_AMMO_BONUS
+                particle_manager.emit(pl_inf['pos'][0], color=(255, 255, 255), count=15)
+            elif g_type == 'hp':
+                hp += 1
+                particle_manager.emit(pl_inf['pos'][0], color=(255, 100, 100), count=15)
+            elif g_type == 'motor':
+                motors_collected += 1
+                ultimate_energy = min(100, ultimate_energy + 2)
+                particle_manager.emit(pl_inf['pos'][0], color=(255, 215, 0), count=15)
+                
+            collision_sound.play()
 
         if (
             score % game[lv_game][req_plus_hp] == 0
@@ -1637,37 +1916,26 @@ def loop_playing(screen, load=None, difficulty=None):
         half_h = ph // 2
 
         nx = max(0, min(Max[0] - pw, mx - half_w))
-
         ny = max(0, min(Max[1] - ph, my - half_h))
-
-        pl_inf['pos'][0] = (nx, ny)
+        
+        # [UPGRADE] Smooth Movement (Lerp)
+        player_target_pos = [nx, ny]
+        # Faster responsiveness
+        move_speed = 0.5 * stats['speed_mult']
+        player_current_pos[0] += (player_target_pos[0] - player_current_pos[0]) * move_speed
+        player_current_pos[1] += (player_target_pos[1] - player_current_pos[1]) * move_speed
+        
+        pl_inf['pos'][0] = (int(player_current_pos[0]), int(player_current_pos[1]))
 
     if load[0] < len(game):
-
-        loop_playing(screen, load)
-
+        return True # Handled by main.py loop
     else:
-
         pygame.time.set_timer(egg_speed, 0)
-
         pygame.time.set_timer(countdown, 0)
-
-        screen_show_mess(screen, 'YOU WIN')
-
-        pygame.time.delay(3000)
-
+        show_popup(screen, 'YOU WIN!', 'Chúc mừng bạn đã hoàn thành game!')
         record_high_score(score)
-
         w_file(
-            1,
-            1,
-            0,
-            5,
-            0,
-            2,
-            0,
-            skin_index,
-            starting_ammo(2),
+            1, 1, 0, 5, 0, 2, 0, skin_index, starting_ammo(2),
+            0, 0, 0, 0 # Motors and upgrades reset for new loop
         )
-
-    return
+    return False

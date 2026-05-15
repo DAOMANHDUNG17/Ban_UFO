@@ -5,16 +5,16 @@ import pygame
 _ROOT = os.path.dirname(os.path.abspath(__file__))
 _DATA = os.path.normpath(os.path.join(_ROOT, '..', 'Data'))
 
-GIFT_DROP_RATE = 0.05
+GIFT_DROP_RATE = 0.08
 MAX_GIFTS_PER_STAGE = 2
 
 EGG_AMMO_LOSS = 8
 BIG_EGG_AMMO_LOSS = 14
-GIFT_AMMO_BONUS = 28
+GIFT_AMMO_BONUS = 50
 
 
 def starting_ammo(difficulty):
-    return {1: 120, 2: 90, 3: 65}[difficulty]
+    return {1: 200, 2: 150, 3: 100}[difficulty]
 
 
 def save_file_path():
@@ -47,6 +47,7 @@ def all_img():
         'bg': _img_path('background.png'),
         'score': _img_path('score.png'),
         'hp': _img_path('hp.png'),
+        'motor': _img_path('motor.png'),
         'player': _img_path('spaceship.png'),
         'chicken': _img_path('chicken.png'),
         'laser': _img_path('laser.png'),
@@ -69,6 +70,7 @@ def all_size():
         'chicken': (50, 50),
         'laser': (20, 40),
         'egg': (30, 40),
+        'motor': (50, 50),
         'explode': (60, 60),
         'font': 50,
         'small_font': 25,
@@ -96,22 +98,36 @@ def all_position():
     }
 
 
+_FONTS = {}
+
 def text(string='Unknown', size=50, color='Yellow', underline=False, bold=False, italic=False, smooth=True):
     font_path = os.path.join(_DATA, 'font', 'VT323-Regular.ttf')
-    x = pygame.font.Font(font_path, size)
-    x.set_underline(underline)
-    x.set_bold(bold)
-    x.set_italic(italic)
-    return x.render(string, smooth, color).convert_alpha()
+    font_key = (size, bold, italic, underline)
+    if font_key not in _FONTS:
+        try:
+            f = pygame.font.Font(font_path, size)
+        except:
+            f = pygame.font.SysFont('Arial', size)
+        f.set_underline(underline)
+        f.set_bold(bold)
+        f.set_italic(italic)
+        _FONTS[font_key] = f
+    
+    return _FONTS[font_key].render(string, smooth, color).convert_alpha()
 
+
+_IMG_CACHE = {}
 
 def get_img(name_img='bg', name_size=None):
     if not name_size:
         name_size = name_img
-    img = all_img()
-    size = all_size()
-    x = pygame.image.load(img[name_img]).convert_alpha()
-    return pygame.transform.scale(x, size[name_size])
+    cache_key = (name_img, name_size)
+    if cache_key not in _IMG_CACHE:
+        img = all_img()
+        size = all_size()
+        x = pygame.image.load(img[name_img]).convert_alpha()
+        _IMG_CACHE[cache_key] = pygame.transform.scale(x, size[name_size])
+    return _IMG_CACHE[cache_key]
 
 
 def make_player_ship(skin_index):
@@ -253,39 +269,44 @@ def get_gift_img():
 def menu_start():
     size = all_size()
     return [
-        text('MAIN MENU', size['title'], 'Red'),
-        text('Play Game', size['font'], 'Yellow', True),
-        text('High Scores', size['font'], 'Yellow', True),
-        text('Hangar', size['font'], 'Yellow', True),
-        text('Exit', size['font'], 'Yellow', True),
+        text('MENU CHÍNH', size['title'], 'Red'),
+        text('Bắt đầu chơi', size['font'], 'Yellow', True),
+        text('Bảng điểm', size['font'], 'Yellow', True),
+        text('Phi thuyền', size['font'], 'Yellow', True),
+        text('Cửa hàng', size['font'], 'Cyan', True),
+        text('Hướng dẫn', size['font'], 'Yellow', True),
+        text('Thoát game', size['font'], 'Yellow', True),
     ]
 
 
 def menu_difficulty():
     size = all_size()
     return [
-        text('DIFFICULTY', size['title'], 'Red'),
-        text('Easy', size['font'], 'Yellow', True),
-        text('Medium', size['font'], 'Yellow', True),
-        text('Hard', size['font'], 'Yellow', True),
+        text('ĐỘ KHÓ', size['title'], 'Red'),
+        text('Dễ', size['font'], 'Green', True),
+        text('Vừa', size['font'], 'Yellow', True),
+        text('Khó', size['font'], 'Red', True),
+        text('Quay lại', size['font'], 'White', True),
     ]
 
 
 def menu_load():
     size = all_size()
     return [
-        text('LOAD LEVEL', size['title'], 'Red'),
-        text('Previous Level', size['font'], 'Yellow', True),
-        text('New Game', size['font'], 'Yellow', True)
+        text('CHẾ ĐỘ CHƠI', size['title'], 'Red'),
+        text('Tiếp tục', size['font'], 'Yellow', True),
+        text('Chơi mới', size['font'], 'Yellow', True),
+        text('Quay lại', size['font'], 'White', True),
     ]
 
 
 def menu_pause():
     size = all_size()
     return [
-        text('PAUSE GAME', size['title'], 'Red'),
-        text('Resume', size['font'], 'Yellow', True),
-        text('Reload', size['font'], 'Yellow', True)
+        text('TẠM DỪNG', size['title'], 'Red'),
+        text('Tiếp tục', size['font'], 'Yellow', True),
+        text('Chơi lại', size['font'], 'Yellow', True),
+        text('Thoát ra Menu', size['font'], 'White', True)
     ]
 
 
@@ -304,6 +325,61 @@ def player_inf(skin_index=0):
         'skin_index': skin_index,
     }
 
+def w_file(
+    lv_game,
+    lv_gun,
+    score,
+    hp,
+    gift_rays=0,
+    difficulty=2,
+    missiles=0,
+    skin_index=0,
+    ammo=None,
+    feathers=0,
+    u_speed=0,
+    u_hp=0,
+    u_missile=0,
+):
+    if ammo is None:
+        ammo = starting_ammo(2)
+    path = save_file_path()
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    data = [
+        f"{lv_game}\n", f"{lv_gun}\n", f"{score}\n", f"{hp}\n",
+        f"{gift_rays}\n", f"{difficulty}\n", f"{missiles}\n",
+        f"{skin_index}\n", f"{ammo}\n", f"{feathers}\n",
+        f"{u_speed}\n", f"{u_hp}\n", f"{u_missile}\n",
+    ]
+    with open(path, 'w') as file:
+        file.writelines(data)
+
+def r_file():
+    path = save_file_path()
+    if not os.path.exists(path):
+        d = [1, 1, 0, 5, 0, 2, 0, 0, starting_ammo(2), 0, 0, 0, 0]
+        w_file(*d)
+        return d
+    x = []
+    with open(path) as file:
+        for line in file:
+            line = line.strip()
+            if line != '': x.append(int(line))
+    # Migration/Padding
+    while len(x) < 13:
+        if len(x) == 9: x.extend([0, 0, 0, 0]) # Add feathers & upgrades
+        else: x.append(0)
+    return x
+
+def upgrade_costs(level):
+    # Tiered pricing: level 0 -> 50, 1 -> 250, 2 -> 550, 3 -> 950...
+    return 50 + (level * 200) + (level**2 * 100)
+
+def get_stat_bonus(u_speed, u_hp, u_missile):
+    return {
+        'speed_mult': 1.0 + (u_speed * 0.1),
+        'max_hp_bonus': u_hp,
+        'missile_cd_red': u_missile * 0.15
+    }
 
 def chicken_inf(enemy_variant=0):
 
@@ -423,12 +499,12 @@ def game_level():
 def gun_level():
     return [
         [],
-        [1000, 1, 8, 10],
-        [500, 1, 8, 25],
-        [1000, 2, 10, 50],
-        [800, 2, 10, 80],
-        [500, 2, 10, 100],
-        [1000, 3, 10, 120],
-        [800, 3, 10, 150],
-        [500, 3, 10, 200]
+        [1000, 1, 16, 10],
+        [500, 1, 18, 25],
+        [1000, 2, 20, 50],
+        [800, 2, 22, 80],
+        [500, 2, 24, 100],
+        [1000, 3, 24, 120],
+        [800, 3, 25, 150],
+        [500, 3, 25, 200]
     ]
