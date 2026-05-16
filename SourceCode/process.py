@@ -528,7 +528,7 @@ def add_event(id_event, timer):
 
     event_id = pygame.USEREVENT + id_event
 
-    pygame.time.set_timer(event_id, timer)
+    pygame.time.set_timer(event_id, int(timer))
 
     return event_id
 
@@ -1035,30 +1035,30 @@ def health_bar(surface, x, y, hp, max_hp, width=200, height=20):
 def apply_screen_shake(offset, magnitude=5):
     return (random.randint(-magnitude, magnitude), random.randint(-magnitude, magnitude))
 
-def loop_playing(screen, load=None, difficulty=None):
+# def loop_playing(screen, load=None, difficulty=None):
 
-    if load is None:
+#     if load is None:
 
-        prev = r_file()
+#         prev = r_file()
 
-        sk = prev[7] if len(prev) > 7 else 0
+#         sk = prev[7] if len(prev) > 7 else 0
 
-        d = difficulty if difficulty is not None else 2
+#         d = difficulty if difficulty is not None else 2
 
-        load = [1, 1, 0, 5, 0, d, 0, sk, starting_ammo(d)]
+#         load = [1, 1, 0, 5, 0, d, 0, sk, starting_ammo(d)]
 
-    elif len(load) == 4:
+#     elif len(load) == 4:
 
-        load = load + [0, 2, 0, 0, starting_ammo(2)]
+#         load = load + [0, 2, 0, 0, starting_ammo(2)]
 
-    elif len(load) == 6:
+#     elif len(load) == 6:
 
-        load = load + [0, 0, starting_ammo(2)]
+#         load = load + [0, 0, starting_ammo(2)]
 
-    elif len(load) == 8:
-        load.append(starting_ammo(load[5] if load[5] in (1, 2, 3) else 2))
+#     elif len(load) == 8:
+#         load.append(starting_ammo(load[5] if load[5] in (1, 2, 3) else 2))
 
-    # Ammo now persists across levels as requested
+#     # Ammo now persists across levels as requested
 
 def game_over_screen(screen, score):
     bg = get_img('bg')
@@ -1082,9 +1082,59 @@ def game_over_screen(screen, score):
             if event.type == pygame.QUIT: close()
             if event.type == pygame.KEYDOWN or event.type == pygame.MOUSEBUTTONDOWN:
                 return
+                
+def show_popup(screen, title, message):
+    """Hiển thị popup đơn giản (không dùng modal, chỉ vẽ text)"""
+    pass  # Tạm thời không làm gì, hoặc sử dụng screen_show_mess nếu cần
+
+def find_best_target(player_pos, ck_inf, boss_mode, boss_pos, boss_img=None):
+    """Hàm tìm mục tiêu: Tâm Boss nếu đấu Boss, hoặc con gà gần nhất ở màn thường"""
+    if boss_mode and boss_pos:
+        bw = boss_img.get_width() if boss_img else 180
+        bh = boss_img.get_height() if boss_img else 180
+        return [boss_pos[0] + bw // 2, boss_pos[1] + bh // 2]
+        
+    if not ck_inf['pos']:
+        return None
+        
+    closest_chicken = None
+    min_distance = float('inf')
+    px, py = player_pos
+    
+    # ck_inf['pos'] là danh sách các tuple (x, y)
+    for ch_pos in ck_inf['pos']:
+        if not ch_pos:
+            continue
+        dist = math.hypot(ch_pos[0] - px, ch_pos[1] - py)
+        if dist < min_distance:
+            min_distance = dist
+            closest_chicken = ch_pos
+            
+    return closest_chicken
 
 def loop_playing(screen, load_inf=None, difficulty=None):
     load = load_inf
+    
+    if load is None:
+        prev = r_file()
+        sk = prev[7] if len(prev) > 7 else 0
+        d = difficulty if difficulty is not None else 2
+        load = [1, 1, 0, 5, 0, d, 0, sk, starting_ammo(d)]
+    elif len(load) == 4:
+        load = load + [0, 2, 0, 0, starting_ammo(2)]
+    elif len(load) == 6:
+        load = load + [0, 0, starting_ammo(2)]
+    elif len(load) == 8:
+        load.append(starting_ammo(load[5] if load[5] in (1, 2, 3) else 2))
+
+    # Giải nén mảng dữ liệu từ file save (phải có 13 phần tử)
+    # Đảm bảo load có đủ phần tử, nếu không thì pad thêm
+    while len(load) < 13:
+        if len(load) == 9:
+            load.extend([0, 0, 0, 0])  # Thêm: motors, u_speed, u_hp, u_missile
+        else:
+            load.append(0)
+    
     (
         lv_game,
         lv_gun,
@@ -1092,57 +1142,48 @@ def loop_playing(screen, load_inf=None, difficulty=None):
         hp,
         gift_rays,
         diff_saved,
-        missiles,
+        old_missiles,  # Số missile cũ (không dùng nữa)
         skin_index,
         ammo,
-    ) = load[:9]
+        motors_collected,  # Số ĐỘNG CƠ để mua đồ (INDEX 9)
+        u_speed,
+        u_hp,
+        u_missile,
+    ) = load[:13]
+
+    # --- KHỞI TẠO SỐ ĐẠNLỬA ĐUỔI CHO VAN NÀY ---
+    # current_missiles_count sẽ được cập nhật dựa trên motors_collected trong vòng lặp chơi
+    current_missiles_count = 0  # Khởi tạo 0, sẽ tính lại khi nhặt motor
+    # -------------------------------------------------------
 
     if difficulty is not None:
-
         diff_saved = difficulty
-
         gift_rays = 0
-
-        missiles = 0
-
         ammo = starting_ammo(difficulty)
 
     difficulty = diff_saved
-
     if difficulty not in (1, 2, 3):
-
         difficulty = 2
 
-    gift_rays = max(0, gift_rays)
+    boss_mode = use_boss_fight(lv_game, difficulty)
+    meteor_mode = not boss_mode and lv_game > 0 and lv_game % 3 == 0
 
-    missiles = max(0, missiles)
-
-    ammo = max(0, ammo)
-
-    ns = len(ship_skin_filenames())
-
-    skin_index = max(0, min(ns - 1, skin_index))
-
-    gifts_spawned_stage = 0
-
-    hit_bursts = []
-
-    shoot_time = 0
     num_ck = 1
     num_create_ck = 2
     max_time = 3
     req_plus_hp = 4
-
     game = game_level()
-
+    
+    shoot_time = 0
     ray_gun = 1
     speed_gun = 2
     req_score_gun = 3
-
     gun = gun_level()
 
-    boss_mode = use_boss_fight(lv_game, difficulty)
-    meteor_mode = not boss_mode and lv_game > 0 and lv_game % 3 == 0
+    gift_rays = max(0, gift_rays)
+    ammo = max(0, ammo)
+    ns = len(ship_skin_filenames())
+    skin_index = max(0, min(ns - 1, skin_index))
 
     if boss_mode:
         msg = f"BOSS — MÀN {lv_game}"
@@ -1177,7 +1218,7 @@ def loop_playing(screen, load_inf=None, difficulty=None):
     gift_inf['types'] = [] # Store types: 'rays', 'shield', 'ammo', 'hp'
 
     missile_inf = missile_weapon_inf()
-
+    missiles = load[6] if 'load' in locals() else 0
     boss_hp = 0
 
     boss_max_hp = 0
@@ -1196,9 +1237,9 @@ def loop_playing(screen, load_inf=None, difficulty=None):
 
         boss_pos[0] = Max[0] // 2 - bw // 2
 
-        boss_vx = 3 + lv_game * 1.5 + (3 if difficulty == 3 else 0)
+        boss_vx = 1.5 + lv_game * 0.5 + (1 if difficulty == 3 else 0)
 
-        boss_hp = 50 + lv_game * 60 + (50 if difficulty == 3 else 0)
+        boss_hp = 30 + lv_game * 20 + (20 if difficulty == 3 else 0)
 
         boss_max_hp = boss_hp
 
@@ -1227,7 +1268,8 @@ def loop_playing(screen, load_inf=None, difficulty=None):
     
     # Load Upgrades
     u_data = r_file()
-    motors_collected = u_data[9]
+    # KHÔNG ghi đè motors_collected - giữ nguyên giá trị từ load parameter
+    # motors_collected đã được lấy từ load[9] ở trên
     stats = get_stat_bonus(u_data[10], u_data[11], u_data[12])
     hp = min(hp + stats['max_hp_bonus'], 5 + stats['max_hp_bonus'])
     
@@ -1273,7 +1315,7 @@ def loop_playing(screen, load_inf=None, difficulty=None):
 
         egg_ms = max(160, egg_ms)
 
-    egg_speed = add_event(1, egg_ms)
+    egg_speed = add_event(1, int(egg_ms))
 
     countdown = add_event(2, 1000)
 
@@ -1303,6 +1345,10 @@ def loop_playing(screen, load_inf=None, difficulty=None):
     big_fall = egg_dy + 5 + (5 if boss_mode else 0)
 
     big_hz = egg_horiz + (2 if boss_mode else 0)
+    
+    # Khởi tạo các biến tracking hiệu ứng và gifts
+    gifts_spawned_stage = 0
+    hit_bursts = []
 
     def rays_this_shot():
 
@@ -1398,9 +1444,6 @@ def loop_playing(screen, load_inf=None, difficulty=None):
                 # Skip drawing or draw with alpha if we had an alpha-capable blit here, 
                 # but for simplicity we blink the whole ship draw later in screen_playing or here.
                 pass 
-        # Apply offset after drawing all objects
-        if offset != (0, 0):
-            screen.blit(screen, offset)
         # Draw health bar overlay
         health_bar(screen, 50, 10, hp, 5 + stats['max_hp_bonus'], width=150, height=15)
         # Update particles
@@ -1419,7 +1462,7 @@ def loop_playing(screen, load_inf=None, difficulty=None):
                     laser_sound
                 )
                 muzzle_flash_timer = 3
-                ammo -= 1
+                #ammo -= 1
                 shoot_cooldown = 10 # Fire every 10 frames (~6 shots per second)
         
         if shoot_cooldown > 0:
@@ -1451,14 +1494,24 @@ def loop_playing(screen, load_inf=None, difficulty=None):
             elif event.type == countdown:
                 count -= 1
 
-            elif event.type == pygame.MOUSEBUTTONDOWN:
-                # [UPGRADE] Missile with Cooldown (Right Click)
-                if event.button == 3 and missiles > 0 and missile_timer <= 0:
-                    sx = float(pl_inf['pos'][0][0] + size_player[0] // 2 - 13)
-                    sy = float(pl_inf['pos'][0][1])
-                    missile_inf['items'].append({'x': sx, 'y': sy})
-                    missiles -= 1
-                    missile_timer = int(90 * (1.0 - stats['missile_cd_red']))
+            if event.type == pygame.MOUSEBUTTONDOWN:
+                if event.button == 3:  # Click chuột phải để phóng tên lửa đuổi
+                    if current_missiles_count > 0:
+                        # Tính toán vị trí phóng (để dưới vòng xử lý movement)
+                        mx_pos = pl_inf['pos'][0][0] if isinstance(pl_inf['pos'][0], tuple) else pl_inf['pos'][0]
+                        my_pos = pl_inf['pos'][0][1] if isinstance(pl_inf['pos'][0], tuple) else pl_inf['pos'][1]
+                        pw = pl_inf['img'].get_width()
+                        half_w_missile = pw // 2
+                        
+                        # Tạo quả tên lửa
+                        missile_inf['items'].append({'x': mx_pos + half_w_missile, 'y': my_pos})
+                        
+                        # Trừ đi 1 quả đạn tên lửa đặc biệt vừa dùng
+                        current_missiles_count -= 1
+                        laser_sound.play()
+                    else:
+                        # Nếu bằng 0 thì không cho bắn (Hết đạn tên lửa đuổi)
+                        pass
 
             elif event.type == pygame.KEYDOWN:
 
@@ -1470,14 +1523,23 @@ def loop_playing(screen, load_inf=None, difficulty=None):
 
                     if choose == 2: # Reload
                         break
-                    elif choose == 3: # Main Menu
-                        return
+                    elif choose == 3: # Chọn thoát về Main Menu
+                        # 1. Hủy bỏ số đạn tên lửa đặc biệt của ván này
+                        current_missiles_count = 0
+                        
+                        # 2. GHI FILE SAVE: Giữ nguyên số Xu động cơ và upgrades
+                        w_file(1, 1, 0, 5, 0, difficulty, 0, skin_index, starting_ammo(difficulty), 
+                               motors_collected, u_speed, u_hp, u_missile)
+                        
+                        # 3. Thoát trận về Menu chính
+                        return False
 
                 elif event.key == pygame.K_SPACE and ultimate_energy >= 100:
                     ultimate_energy = 0
                     ultimate_storm_timer = 240 # 4 seconds of Laser Storm
                     screen_shake = 30
-                    show_popup(screen, "ULTIMATE!", "LASER STORM ACTIVATED!")
+                    screen_show_mess(screen, "ULTIMATE! LASER STORM ACTIVATED!")
+                    pygame.time.delay(500)  # Hiển thị thông báo 500ms
 
         stage_clear = False
 
@@ -1514,6 +1576,8 @@ def loop_playing(screen, load_inf=None, difficulty=None):
             lv_game += 1
             # [UPGRADE] Ammo bonus for clearing stage
             ammo += (25 + lv_game * 5)
+            
+            # Lưu file: GIỮ NGUYÊN motors_collected và tất cả upgrades
             w_file(
                 lv_game,
                 lv_gun,
@@ -1521,31 +1585,13 @@ def loop_playing(screen, load_inf=None, difficulty=None):
                 hp,
                 gift_rays,
                 difficulty,
-                missiles,
+                current_missiles_count,  # Lưu lại số missile còn lại
                 skin_index,
                 ammo,
-                motors_collected,
-                u_data[10], u_data[11], u_data[12]
+                motors_collected,  # Lưu động cơ được nhặt trong ván này
+                u_data[10], u_data[11], u_data[12]  # Lưu các upgrade level
             )
             return True
-
-            load = [
-                lv_game,
-                lv_gun,
-                score,
-                hp,
-                gift_rays,
-                difficulty,
-                missiles,
-                skin_index,
-                ammo,
-            ]
-
-            pygame.time.set_timer(egg_speed, 0)
-
-            pygame.time.set_timer(countdown, 0)
-
-            break
 
         if (not meteor_mode and count <= 0) or hp <= 0:
 
@@ -1559,6 +1605,7 @@ def loop_playing(screen, load_inf=None, difficulty=None):
 
             record_high_score(score)
 
+            # Lưu file: GIỮ NGUYÊN motors_collected để không mất xu khi thua
             w_file(
                 1,
                 1,
@@ -1569,6 +1616,8 @@ def loop_playing(screen, load_inf=None, difficulty=None):
                 0,
                 skin_index,
                 starting_ammo(2),
+                motors_collected,  # Giữ nguyên số xu động cơ
+                u_data[10], u_data[11], u_data[12]  # Giữ upgrades
             )
 
             return
@@ -1690,33 +1739,35 @@ def loop_playing(screen, load_inf=None, difficulty=None):
                         gift_inf['types'].append(random.choice(['rays', 'shield', 'ammo', 'hp']))
 
         if missile_inf['items']:
-
             for mi in range(len(missile_inf['items']) - 1, -1, -1):
-
                 m = missile_inf['items'][mi]
-
                 missile_inf['rect'].topleft = (int(m['x']), int(m['y']))
-
-                if boss_mode and boss_hp > 0 and boss_img is not None:
-
-                    br = pygame.Rect(
-                        boss_pos[0],
-                        boss_pos[1],
-                        boss_img.get_width(),
-                        boss_img.get_height(),
-                    )
-
-                    if missile_inf['rect'].colliderect(br):
-
-                        boom_sound.play()
-
-                        boss_hp -= 55
-
-                        missile_inf['items'].pop(mi)
-
-                        continue
                 
-                # [UPGRADE] Missile vs Meteors
+                # [Xử lý va chạm với Boss giữ nguyên]
+                if boss_mode and boss_hp > 0 and boss_img is not None:
+                    br = pygame.Rect(boss_pos[0], boss_pos[1], boss_img.get_width(), boss_img.get_height())
+                    if missile_inf['rect'].colliderect(br):
+                        boom_sound.play()
+                        boss_hp -= 55
+                        missile_inf['items'].pop(mi)
+                        continue
+                        
+                # --- LOGIC AI BẺ LÁI ĐUỔI THEO MỤC TIÊU ---
+                # Gọi hàm tìm mục tiêu tự động (Tâm Boss hoặc Gà gần nhất)
+                target = find_best_target(pl_inf['pos'], ck_inf, boss_mode, boss_pos, boss_img)
+                
+                if target:
+                    # Tính toán góc Vector để bẻ lái bay tới mục tiêu
+                    dx = target[0] - m['x']
+                    dy = target[1] - m['y']
+                    distance = math.hypot(dx, dy)
+                    if distance > 0:
+                        missile_speed = 13  # Tốc độ bám đuổi bẻ lái của tên lửa
+                        m['x'] += (dx / distance) * missile_speed
+                        m['y'] += (dy / distance) * missile_speed
+                else:
+                    m['y'] -= 13  # Sạch bóng quái thì tự bay thẳng lên trời
+        # [UPGRADE] Missile vs Meteors (Nằm ngay phía dưới)
                 hit_mi = None
                 for b_i in range(len(big_egg_inf['pos'])):
                     big_egg_inf['rect'].topleft = big_egg_inf['pos'][b_i]
@@ -1734,6 +1785,9 @@ def loop_playing(screen, load_inf=None, difficulty=None):
                     # Gain energy and money from destroying meteors
                     ultimate_energy = min(100, ultimate_energy + 10)
                     motors_collected += 8 # Meteors give 8 motors
+                    # Cập nhật số tên lửa nếu chia hết cho 50
+                    if motors_collected > 0 and motors_collected % 50 == 0:
+                        current_missiles_count = 1
                     if random.random() < GIFT_DROP_RATE:
                         gift_inf['pos'].append(m_pos)
                         gift_inf['types'].append(random.choice(['rays', 'shield', 'ammo', 'hp']))
@@ -1894,6 +1948,9 @@ def loop_playing(screen, load_inf=None, difficulty=None):
                 motors_collected += 1
                 ultimate_energy = min(100, ultimate_energy + 2)
                 particle_manager.emit(pl_inf['pos'][0], color=(255, 215, 0), count=15)
+                # Kiểm tra nếu đạt mốc 50 thì tặng 1 tên lửa
+                if motors_collected > 0 and motors_collected % 50 == 0:
+                    current_missiles_count = 1
                 
             collision_sound.play()
 
@@ -1912,7 +1969,6 @@ def loop_playing(screen, load_inf=None, difficulty=None):
         pw, ph = size_player
 
         half_w = pw // 2
-
         half_h = ph // 2
 
         nx = max(0, min(Max[0] - pw, mx - half_w))
@@ -1926,16 +1982,31 @@ def loop_playing(screen, load_inf=None, difficulty=None):
         player_current_pos[1] += (player_target_pos[1] - player_current_pos[1]) * move_speed
         
         pl_inf['pos'][0] = (int(player_current_pos[0]), int(player_current_pos[1]))
-
+        # --- [VỊ TRÍ 4.1] KIỂM TRA HẾT MẠNG / GAME OVER ---
+        if hp <= 0:
+            # Hủy bỏ số đạn tên lửa đặc biệt của ván này (reset lại 0)
+            current_missiles_count = 0
+            
+            # GHI FILE SAVE: Bảo lưu hoàn toàn số Xu động cơ và upgrades
+            w_file(1, 1, 0, 5, 0, difficulty, 0, skin_index, starting_ammo(difficulty), 
+                   motors_collected, u_data[10], u_data[11], u_data[12])
+            
+            screen_show_mess(screen, 'GAME OVER - Tên lửa đuổi trận sau sẽ tính lại')
+            pygame.time.delay(2000)
+            return False  # Thoát trận đấu lập tức để quay về Menu chính
+        # --------------------------------------------------
     if load[0] < len(game):
         return True # Handled by main.py loop
     else:
         pygame.time.set_timer(egg_speed, 0)
         pygame.time.set_timer(countdown, 0)
-        show_popup(screen, 'YOU WIN!', 'Chúc mừng bạn đã hoàn thành game!')
+        screen_show_mess(screen, 'YOU WIN! Chúc mừng bạn đã hoàn thành game!')
+        pygame.time.delay(3000)
         record_high_score(score)
+        
+        # Lưu file: Giữ lại số động cơ (motors_collected) và upgrades
         w_file(
             1, 1, 0, 5, 0, 2, 0, skin_index, starting_ammo(2),
-            0, 0, 0, 0 # Motors and upgrades reset for new loop
+            motors_collected, u_data[10], u_data[11], u_data[12]
         )
     return False
