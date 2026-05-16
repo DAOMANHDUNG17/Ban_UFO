@@ -1165,6 +1165,14 @@ def loop_playing(screen, load_inf=None, difficulty=None):
     if difficulty not in (1, 2, 3):
         difficulty = 2
 
+    # Apply upgrades from shop
+    stats = {
+        'speed_mult': 1.0 + (u_speed * 0.15),
+        'max_hp_bonus': u_hp
+    }
+    if lv_game == 1 and hp == 5:
+        hp = 5 + u_hp
+
     boss_mode = use_boss_fight(lv_game, difficulty)
     meteor_mode = not boss_mode and lv_game > 0 and lv_game % 3 == 0
 
@@ -1422,7 +1430,7 @@ def loop_playing(screen, load_inf=None, difficulty=None):
         if gift_rays_timer > 0:
             gift_rays_timer -= 1
             if gift_rays_timer == 0:
-                gift_rays = 0
+                gift_rays = min(gift_rays, 3)
         
         if shield_timer > 0:
             shield_timer -= 1
@@ -1589,38 +1597,27 @@ def loop_playing(screen, load_inf=None, difficulty=None):
                 skin_index,
                 ammo,
                 motors_collected,  # Lưu động cơ được nhặt trong ván này
-                u_data[10], u_data[11], u_data[12]  # Lưu các upgrade level
+                u_speed, u_hp, u_missile
             )
             return True
 
         if (not meteor_mode and count <= 0) or hp <= 0:
-
-            screen_show_mess(screen, 'YOU LOSE')
-
+            screen_show_mess(screen, 'GAME OVER - Tên lửa đuổi trận sau sẽ tính lại')
             pygame.time.delay(3000)
-
             pygame.time.set_timer(egg_speed, 0)
-
             pygame.time.set_timer(countdown, 0)
-
             record_high_score(score)
-
-            # Lưu file: GIỮ NGUYÊN motors_collected để không mất xu khi thua
+            
+            # Reset tên lửa đuổi của ván này về 0 khi thua
+            current_missiles_count = 0
+            
+            # GHI FILE: Đưa màn về 1, súng về 1, bảo lưu Xu động cơ và toàn bộ Upgrades kĩ năng
             w_file(
-                1,
-                1,
-                0,
-                5,
-                0,
-                2,
-                0,
-                skin_index,
-                starting_ammo(2),
-                motors_collected,  # Giữ nguyên số xu động cơ
-                u_data[10], u_data[11], u_data[12]  # Giữ upgrades
+                1, 1, 0, 5, 0, difficulty, current_missiles_count, 
+                skin_index, starting_ammo(difficulty), motors_collected, 
+                u_speed, u_hp, u_missile
             )
-
-            return
+            return False  # Thoát trận đấu quay về Menu chính
 
         if (
             lv_gun < len(gun) - 1
@@ -1745,7 +1742,7 @@ def loop_playing(screen, load_inf=None, difficulty=None):
                         
                 # --- LOGIC AI BẺ LÁI ĐUỔI THEO MỤC TIÊU ---
                 # Gọi hàm tìm mục tiêu tự động (Tâm Boss hoặc Gà gần nhất)
-                target = find_best_target(pl_inf['pos'], ck_inf, boss_mode, boss_pos, boss_img)
+                target = find_best_target(pl_inf['pos'][0], ck_inf, boss_mode, boss_pos, boss_img)
                 
                 if target:
                     # Tính toán góc Vector để bẻ lái bay tới mục tiêu
@@ -1898,6 +1895,10 @@ def loop_playing(screen, load_inf=None, difficulty=None):
                 invincibility_timer = 90
                 shake_timer = 15
                 particle_manager.emit(pl_inf['pos'][0], color=(255, 50, 0), count=20)
+            if gift_rays > 0:
+                gift_rays -= 1
+                if gift_rays < 3:
+                    gift_rays_timer = 0
 
         check = collision(score_inf, pl_inf)
 
@@ -1924,8 +1925,11 @@ def loop_playing(screen, load_inf=None, difficulty=None):
             
             # [UPGRADE] Gift handling with stacking timers
             if g_type == 'rays':
-                gift_rays += 1
-                gift_rays_timer += 600 # Add 10 seconds
+                if gift_rays < 3:
+                    gift_rays += 1
+                else:
+                    gift_rays += 1
+                    gift_rays_timer += 600  # temporary extra
                 particle_manager.emit(pl_inf['pos'][0], color=(0, 255, 255), count=15)
             elif g_type == 'shield':
                 shield_timer += 480 # Add 8 seconds
@@ -1974,19 +1978,6 @@ def loop_playing(screen, load_inf=None, difficulty=None):
         player_current_pos[1] += (player_target_pos[1] - player_current_pos[1]) * move_speed
         
         pl_inf['pos'][0] = (int(player_current_pos[0]), int(player_current_pos[1]))
-        # --- [VỊ TRÍ 4.1] KIỂM TRA HẾT MẠNG / GAME OVER ---
-        if hp <= 0:
-            # Hủy bỏ số đạn tên lửa đặc biệt của ván này (reset lại 0)
-            current_missiles_count = 0
-            
-            # GHI FILE SAVE: Bảo lưu hoàn toàn số Xu động cơ và upgrades
-            w_file(1, 1, 0, 5, 0, difficulty, 0, skin_index, starting_ammo(difficulty), 
-                   motors_collected, u_data[10], u_data[11], u_data[12])
-            
-            screen_show_mess(screen, 'GAME OVER - Tên lửa đuổi trận sau sẽ tính lại')
-            pygame.time.delay(2000)
-            return False  # Thoát trận đấu lập tức để quay về Menu chính
-        # --------------------------------------------------
     if load[0] < len(game):
         return True # Handled by main.py loop
     else:
@@ -1998,7 +1989,7 @@ def loop_playing(screen, load_inf=None, difficulty=None):
         
         # Lưu file: Giữ lại số động cơ (motors_collected) và upgrades
         w_file(
-            1, 1, 0, 5, 0, 2, 0, skin_index, starting_ammo(2),
-            motors_collected, u_data[10], u_data[11], u_data[12]
+            1, 1, 0, 5, 0, difficulty, 0, skin_index, starting_ammo(difficulty),
+            motors_collected, u_speed, u_hp, u_missile
         )
     return False

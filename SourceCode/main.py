@@ -118,27 +118,23 @@ def main():
                 continue
             
             difficulty = diff_sel
+            fade_out(screen)  # Đưa lên đầu cho cả hai trường hợp
             if os.path.exists(save_file_path()):
-                select_load = create_menu(screen, menu_load(), highlight_color=(0, 255, 0), shadow=True)
-                if select_load == 3: # 'Back' button in load menu
-                    continue
+                prev = list(r_file())
+                # Đảm bảo giữ nguyên các chỉ số nâng cấp cũ, chỉ reset cấp độ chơi (màn 1), điểm số (0), máu ban đầu (5)
+                sk = prev[7] if len(prev) > 7 else 0
+                feathers = prev[9] if len(prev) > 9 else 0
+                u_speed = prev[10] if len(prev) > 10 else 0
+                u_hp = prev[11] if len(prev) > 11 else 0
+                u_missile = prev[12] if len(prev) > 12 else 0
                 
-                if select_load == 1: # Previous Level
-                    fade_out(screen)
-                    while True:
-                        if not loop_playing(screen, r_file()): break
-                else: # New Game (select_load == 2)
-                    prev = r_file()
-                    sk = prev[7] if len(prev) > 7 else 0
-                    w_file(1, 1, 0, 5, 0, difficulty, 0, sk, starting_ammo(difficulty))
-                    fade_out(screen)
-                    while True:
-                        if not loop_playing(screen, r_file()): break
+                w_file(1, 1, 0, 5, 0, difficulty, 0, sk, starting_ammo(difficulty), feathers, u_speed, u_hp, u_missile)
             else:
-                fade_out(screen)
-                w_file(1, 1, 0, 5, 0, difficulty, 0, 0, starting_ammo(difficulty))
-                while True:
-                    if not loop_playing(screen, r_file()): break
+                w_file(1, 1, 0, 5, 0, difficulty, 0, 0, starting_ammo(difficulty), 0, 0, 0, 0)
+                
+            while True:
+                if not loop_playing(screen, r_file()): 
+                    break
         elif select_start == 2:
             show_popup(screen, 'HIGHSCORES', 'Top 10 điểm cao nhất sẽ được lưu lại!')
             highscores_menu(screen)
