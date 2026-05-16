@@ -1153,7 +1153,7 @@ def loop_playing(screen, load_inf=None, difficulty=None):
 
     # --- KHỞI TẠO SỐ ĐẠNLỬA ĐUỔI CHO VAN NÀY ---
     # current_missiles_count sẽ được cập nhật dựa trên motors_collected trong vòng lặp chơi
-    current_missiles_count = 0  # Khởi tạo 0, sẽ tính lại khi nhặt motor
+    current_missiles_count = old_missiles  # Khôi phục số tên lửa còn lại từ save (nếu có)
     # -------------------------------------------------------
 
     if difficulty is not None:
@@ -1395,7 +1395,7 @@ def loop_playing(screen, load_inf=None, difficulty=None):
             boss_draw,
             missile_inf,
             big_egg_inf,
-            missiles,
+            current_missiles_count,
             ammo,
             hit_bursts,
             gift_rays_timer,
@@ -1645,15 +1645,6 @@ def loop_playing(screen, load_inf=None, difficulty=None):
                 move(egg_dy, egg_inf)
         move_eggs(big_egg_inf, big_fall, big_hz)
         move(-gun[lv_gun][speed_gun], ls_inf)
-        step_homing_missiles(
-            missile_inf,
-            17,
-            boss_mode,
-            boss_hp,
-            boss_pos,
-            boss_img,
-            ck_inf,
-        )
         cull_missiles(missile_inf, Max)
         move(1, score_inf)
         move(1, gift_inf)
@@ -1767,7 +1758,8 @@ def loop_playing(screen, load_inf=None, difficulty=None):
                         m['y'] += (dy / distance) * missile_speed
                 else:
                     m['y'] -= 13  # Sạch bóng quái thì tự bay thẳng lên trời
-        # [UPGRADE] Missile vs Meteors (Nằm ngay phía dưới)
+
+                # [UPGRADE] Missile vs Meteors (Nằm ngay phía dưới)
                 hit_mi = None
                 for b_i in range(len(big_egg_inf['pos'])):
                     big_egg_inf['rect'].topleft = big_egg_inf['pos'][b_i]
@@ -1787,7 +1779,7 @@ def loop_playing(screen, load_inf=None, difficulty=None):
                     motors_collected += 8 # Meteors give 8 motors
                     # Cập nhật số tên lửa nếu chia hết cho 50
                     if motors_collected > 0 and motors_collected % 50 == 0:
-                        current_missiles_count = 1
+                        current_missiles_count += 1
                     if random.random() < GIFT_DROP_RATE:
                         gift_inf['pos'].append(m_pos)
                         gift_inf['types'].append(random.choice(['rays', 'shield', 'ammo', 'hp']))
@@ -1950,7 +1942,7 @@ def loop_playing(screen, load_inf=None, difficulty=None):
                 particle_manager.emit(pl_inf['pos'][0], color=(255, 215, 0), count=15)
                 # Kiểm tra nếu đạt mốc 50 thì tặng 1 tên lửa
                 if motors_collected > 0 and motors_collected % 50 == 0:
-                    current_missiles_count = 1
+                    current_missiles_count += 1
                 
             collision_sound.play()
 
