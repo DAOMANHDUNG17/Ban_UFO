@@ -38,7 +38,8 @@ def read_highscores():
     try:
         with open(path, 'r') as f:
             return sorted([int(line.strip()) for line in f if line.strip()], reverse=True)
-    except:
+    except Exception as e:
+        print(f"Highscore read error: {e}")
         return []
 
 
@@ -306,27 +307,13 @@ def hangar_menu(screen):
 
                     data = list(r_file())
 
-                    while len(data) < 9:
-
-                        pad = starting_ammo(
-                            data[5] if len(data) > 5 and data[5] in (1, 2, 3) else 2
-                        )
-
-                        data.append(pad)
-
+                    while len(data) < 13:
+                        if len(data) == 9:
+                            data.extend([0, 0, 0, 0])
+                        else:
+                            data.append(0)
                     data[7] = skin_i
-
-                    w_file(
-                        data[0],
-                        data[1],
-                        data[2],
-                        data[3],
-                        data[4],
-                        data[5],
-                        data[6],
-                        data[7],
-                        data[8],
-                    )
+                    w_file(*data)
 
                     return
 
@@ -567,10 +554,6 @@ def show_score_hp(screen, score, motors, hp, rays_per_shot=None,
     hp_text = text(f"x{hp}", 50, 'Brown')
     screen.blit(hp_text, (85, 65))
 
-    if ammo is not None:
-        atxt = text(f"Đạn: {ammo}", 40, 'White')
-        screen.blit(atxt, (50, 130))
-
     if rays_per_shot is not None:
         ray_text = text(f"Số tia: {rays_per_shot}", 35, 'Cyan')
         screen.blit(ray_text, (50, 175))
@@ -600,7 +583,7 @@ def screen_playing(screen, obj, pl_inf, ck_inf,
                    ammo=None, hit_bursts=None,
                    gift_rays_timer=0, shield_timer=0,
                    ship_tilt=0, muzzle_flash=0,
-                   ultimate_energy=0, feathers=0):
+                    ultimate_energy=0, feathers=0, motors_collected=0, current_missiles_count=0, invincibility_timer=0):
 
     for i, j in obj:
         screen.blit(i, j)
@@ -685,15 +668,14 @@ def screen_playing(screen, obj, pl_inf, ck_inf,
     show_score_hp(
         screen,
         score,
-        feathers,
+        motors_collected,
         hp,
         rays_per_shot,
         ammo,
-        missiles_left,
+        current_missiles_count,
     )
     
-    # [UPGRADE] Currency display
-    screen.blit(text(f"Động cơ (Tổng): {feathers}", 30, (255, 215, 0)), (50, 265))
+    # [UPGRADE] Currency display hidden during match (only in-match motors_collected shown in HUD)
 
     # [UPGRADE] Power-up HUD
     py_y = 305
@@ -735,7 +717,10 @@ def screen_playing(screen, obj, pl_inf, ck_inf,
         ship_img = pygame.transform.rotate(pl_inf['img'], angle)
     
     ship_rect = ship_img.get_rect(center=(pl_inf['pos'][0][0] + pl_inf['img'].get_width()//2, pl_inf['pos'][0][1] + pl_inf['img'].get_height()//2))
-    screen.blit(ship_img, ship_rect)
+    if invincibility_timer > 0 and (pygame.time.get_ticks() // 100) % 2 == 0:
+        pass  # blink: skip draw
+    else:
+        screen.blit(ship_img, ship_rect)
     
     # [UPGRADE] Muzzle Flash
     if muzzle_flash > 0:
@@ -1151,6 +1136,8 @@ def loop_playing(screen, load_inf=None, difficulty=None):
         u_missile,
     ) = load[:13]
 
+    shop_feathers = load[9] if len(load) > 9 else 0
+
     # --- KHỞI TẠO SỐ ĐẠNLỬA ĐUỔI CHO VAN NÀY ---
     # current_missiles_count sẽ được cập nhật dựa trên motors_collected trong vòng lặp chơi
     current_missiles_count = old_missiles  # Khôi phục số tên lửa còn lại từ save (nếu có)
@@ -1293,6 +1280,7 @@ def loop_playing(screen, load_inf=None, difficulty=None):
     # [UPGRADE] Timed Power-ups
     gift_rays_timer = 0
     shield_timer = 0
+    player_immune_timer = 0
     shield_font = pygame.font.SysFont('Arial', 30, bold=True)
     
     shoot_cooldown = 0 # Rapid fire cooldown
@@ -1305,6 +1293,9 @@ def loop_playing(screen, load_inf=None, difficulty=None):
 
     ramp = stage_ramp(lv_game)
 
+    if lv_game >= len(game):
+        # Win handled at end of loop
+        return True
     egg_ms = int(
         game[lv_game][shoot_time]
         * egg_interval_mult(difficulty)
@@ -1411,7 +1402,10 @@ def loop_playing(screen, load_inf=None, difficulty=None):
             (player_target_pos[0] - player_current_pos[0]), # ship_tilt velocity
             muzzle_flash_timer,
             ultimate_energy,
-            motors_collected
+            motors_collected,
+            motors_collected,
+            current_missiles_count,
+            invincibility_timer
         )
         
         # [UPGRADE] Cooldowns logic
@@ -1462,7 +1456,7 @@ def loop_playing(screen, load_inf=None, difficulty=None):
 
         # [AUTO-FIRE] Rapid fire when holding mouse button
         if pygame.mouse.get_pressed()[0]:
-            if shoot_cooldown <= 0 and ammo > 0:
+            if shoot_cooldown <= 0:
                 create_laser(
                     rays_this_shot(),
                     ls_inf,
@@ -1535,9 +1529,9 @@ def loop_playing(screen, load_inf=None, difficulty=None):
                         # 1. Hủy bỏ số đạn tên lửa đặc biệt của ván này
                         current_missiles_count = 0
                         
-                        # 2. GHI FILE SAVE: Giữ nguyên số Xu động cơ và upgrades
+                        shop_feathers += motors_collected
                         w_file(1, 1, 0, 5, 0, difficulty, 0, skin_index, starting_ammo(difficulty), 
-                               motors_collected, u_speed, u_hp, u_missile)
+                                shop_feathers, u_speed, u_hp, u_missile)
                         
                         # 3. Thoát trận về Menu chính
                         return False
@@ -1582,10 +1576,14 @@ def loop_playing(screen, load_inf=None, difficulty=None):
                 pygame.time.delay(1500)
 
             lv_game += 1
-            # [UPGRADE] Ammo bonus for clearing stage
-            ammo += (25 + lv_game * 5)
-            
-            # Lưu file: GIỮ NGUYÊN motors_collected và tất cả upgrades
+            if difficulty == 2 and lv_game > 20:
+                screen_show_mess(screen, 'YOU WIN! Chúc mừng bạn đã hoàn thành game!')
+                pygame.time.delay(3000)
+                record_high_score(score)
+                shop_feathers += motors_collected
+                w_file(1, 1, 0, 5, 0, difficulty, 0, skin_index, starting_ammo(difficulty),
+                       shop_feathers, u_speed, u_hp, u_missile)
+                return False
             w_file(
                 lv_game,
                 lv_gun,
@@ -1593,10 +1591,10 @@ def loop_playing(screen, load_inf=None, difficulty=None):
                 hp,
                 gift_rays,
                 difficulty,
-                current_missiles_count,  # Lưu lại số missile còn lại
+                current_missiles_count,
                 skin_index,
                 ammo,
-                motors_collected,  # Lưu động cơ được nhặt trong ván này
+                motors_collected,
                 u_speed, u_hp, u_missile
             )
             return True
@@ -1611,10 +1609,10 @@ def loop_playing(screen, load_inf=None, difficulty=None):
             # Reset tên lửa đuổi của ván này về 0 khi thua
             current_missiles_count = 0
             
-            # GHI FILE: Đưa màn về 1, súng về 1, bảo lưu Xu động cơ và toàn bộ Upgrades kĩ năng
+            shop_feathers += motors_collected
             w_file(
                 1, 1, 0, 5, 0, difficulty, current_missiles_count, 
-                skin_index, starting_ammo(difficulty), motors_collected, 
+                skin_index, starting_ammo(difficulty), shop_feathers, 
                 u_speed, u_hp, u_missile
             )
             return False  # Thoát trận đấu quay về Menu chính
@@ -1858,7 +1856,7 @@ def loop_playing(screen, load_inf=None, difficulty=None):
 
                 egg_inf['direct'].pop(check[0])
 
-            ammo = max(0, ammo - EGG_AMMO_LOSS)
+            pass  # infinite ammo
 
             if invincibility_timer <= 0 and shield_timer <= 0:
                 hp -= 1
@@ -1866,6 +1864,10 @@ def loop_playing(screen, load_inf=None, difficulty=None):
                 shake_timer = 10
                 # Particle effect for player hit
                 particle_manager.emit(pl_inf['pos'][0], color=(255, 0, 0), count=15)
+                if gift_rays > 0:
+                    gift_rays -= 1
+                    if gift_rays < 3:
+                        gift_rays_timer = 0
 
         check = collision(big_egg_inf, pl_inf)
 
@@ -1888,14 +1890,14 @@ def loop_playing(screen, load_inf=None, difficulty=None):
 
             big_egg_inf['direct'].pop(check[0])
 
-            ammo = max(0, ammo - BIG_EGG_AMMO_LOSS)
+            pass  # infinite ammo
 
             if invincibility_timer <= 0 and shield_timer <= 0:
                 hp -= 2
                 invincibility_timer = 90
                 shake_timer = 15
                 particle_manager.emit(pl_inf['pos'][0], color=(255, 50, 0), count=20)
-            if gift_rays > 0:
+            if invincibility_timer <= 0 and gift_rays > 0:
                 gift_rays -= 1
                 if gift_rays < 3:
                     gift_rays_timer = 0
@@ -1914,8 +1916,6 @@ def loop_playing(screen, load_inf=None, difficulty=None):
 
                 missiles += 1
 
-            plus_hp = False
-
         check = collision(gift_inf, pl_inf)
         if check is not None:
             g_idx = check[0]
@@ -1925,17 +1925,18 @@ def loop_playing(screen, load_inf=None, difficulty=None):
             
             # [UPGRADE] Gift handling with stacking timers
             if g_type == 'rays':
-                if gift_rays < 3:
+                if gift_rays < max_rays_per_shot():
                     gift_rays += 1
+                    if gift_rays > max_rays_per_shot():
+                        gift_rays = max_rays_per_shot()
                 else:
-                    gift_rays += 1
-                    gift_rays_timer += 600  # temporary extra
+                    score += 500
                 particle_manager.emit(pl_inf['pos'][0], color=(0, 255, 255), count=15)
             elif g_type == 'shield':
                 shield_timer += 480 # Add 8 seconds
                 particle_manager.emit(pl_inf['pos'][0], color=(100, 200, 255), count=15)
             elif g_type == 'ammo':
-                ammo += GIFT_AMMO_BONUS
+                pass  # infinite ammo
                 particle_manager.emit(pl_inf['pos'][0], color=(255, 255, 255), count=15)
             elif g_type == 'hp':
                 hp += 1
@@ -1978,7 +1979,7 @@ def loop_playing(screen, load_inf=None, difficulty=None):
         player_current_pos[1] += (player_target_pos[1] - player_current_pos[1]) * move_speed
         
         pl_inf['pos'][0] = (int(player_current_pos[0]), int(player_current_pos[1]))
-    if load[0] < len(game):
+    if lv_game < len(game):
         return True # Handled by main.py loop
     else:
         pygame.time.set_timer(egg_speed, 0)
@@ -1987,9 +1988,9 @@ def loop_playing(screen, load_inf=None, difficulty=None):
         pygame.time.delay(3000)
         record_high_score(score)
         
-        # Lưu file: Giữ lại số động cơ (motors_collected) và upgrades
+        shop_feathers += motors_collected
         w_file(
             1, 1, 0, 5, 0, difficulty, 0, skin_index, starting_ammo(difficulty),
-            motors_collected, u_speed, u_hp, u_missile
+            shop_feathers, u_speed, u_hp, u_missile
         )
     return False

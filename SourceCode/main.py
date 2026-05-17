@@ -128,7 +128,7 @@ def main():
                 u_hp = prev[11] if len(prev) > 11 else 0
                 u_missile = prev[12] if len(prev) > 12 else 0
                 
-                w_file(1, 1, 0, 5, 0, difficulty, 0, sk, starting_ammo(difficulty), feathers, u_speed, u_hp, u_missile)
+                w_file(1, 1, 0, 5, 0, difficulty, 0, sk, starting_ammo(difficulty), 0, u_speed, u_hp, u_missile)
             else:
                 w_file(1, 1, 0, 5, 0, difficulty, 0, 0, starting_ammo(difficulty), 0, 0, 0, 0)
                 
