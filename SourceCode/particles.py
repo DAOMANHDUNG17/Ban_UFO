@@ -37,6 +37,10 @@ class Particle:
         else:
             self.radius = self.max_radius * (1 - (progress - 0.2) / 0.8)
             
+        # Cull off-screen particles
+        if self.x < -50 or self.x > 1416 or self.y < -50 or self.y > 818:
+            return False
+            
         return True
 
     def draw(self, surface):

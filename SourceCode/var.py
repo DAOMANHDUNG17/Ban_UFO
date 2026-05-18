@@ -8,13 +8,8 @@ _DATA = os.path.normpath(os.path.join(_ROOT, '..', 'Data'))
 GIFT_DROP_RATE = 0.08
 MAX_GIFTS_PER_STAGE = 2
 
-EGG_AMMO_LOSS = 8
-BIG_EGG_AMMO_LOSS = 14
-GIFT_AMMO_BONUS = 50
-
-
 def starting_ammo(difficulty):
-    return {1: 200, 2: 150, 3: 100}[difficulty]
+    return 999999
 
 
 def save_file_path():
@@ -113,7 +108,7 @@ def text(string='Unknown', size=50, color='Yellow', underline=False, bold=False,
         f.set_italic(italic)
         _FONTS[font_key] = f
     
-    return _FONTS[font_key].render(string, smooth, color).convert_alpha()
+    return _FONTS[font_key].render(string, smooth, color)
 
 
 _IMG_CACHE = {}
@@ -460,7 +455,7 @@ def obj_default_playing():
         [text('Pause(Esc)', size['small_font'], 'Gold'), pos['pause']],
         [
             text(
-                'Dan: trung lam mat dan | Trai: ban | Phai: ten lua duoi',
+                'Trúng trứng: Giảm cấp tia | Chuột trái: Bắn | Chuột phải: Tên lửa đuổi',
                 size['small_font'],
                 'Gold',
             ),
