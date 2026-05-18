@@ -334,6 +334,7 @@ def w_file(
     u_speed=0,
     u_hp=0,
     u_missile=0,
+    ultimate_energy=0,
 ):
     if ammo is None:
         ammo = starting_ammo(2)
@@ -344,6 +345,7 @@ def w_file(
         f"{gift_rays}\n", f"{difficulty}\n", f"{missiles}\n",
         f"{skin_index}\n", f"{ammo}\n", f"{feathers}\n",
         f"{u_speed}\n", f"{u_hp}\n", f"{u_missile}\n",
+        f"{ultimate_energy}\n"
     ]
     with open(path, 'w') as file:
         file.writelines(data)
@@ -360,8 +362,9 @@ def r_file():
             line = line.strip()
             if line != '': x.append(int(line))
     # Migration/Padding
-    while len(x) < 13:
-        if len(x) == 9: x.extend([0, 0, 0, 0]) # Add feathers & upgrades
+    while len(x) < 14:
+        if len(x) == 9: x.extend([0, 0, 0, 0, 0]) # Add feathers & upgrades & ultimate
+        elif len(x) == 13: x.append(0)
         else: x.append(0)
     return x
 
@@ -450,8 +453,6 @@ def obj_default_playing():
     size = all_size()
     return [
         [get_img('bg'), pos['bg']],
-        [get_img('score'), pos['score']],
-        [get_img('hp'), pos['hp']],
         [text('Pause(Esc)', size['small_font'], 'Gold'), pos['pause']],
         [
             text(

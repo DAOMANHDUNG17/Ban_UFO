@@ -739,7 +739,7 @@ def create_chicken(level, number_ck, ck_inf):
 
     distance = 80
     x = 100
-    y = 0
+    y = 120
     direct = False
 
     patterns = ['horizontal', 'sine', 'zigzag', 'circle']
@@ -1114,9 +1114,11 @@ def loop_playing(screen, load_inf=None, difficulty=None):
 
     # Giải nén mảng dữ liệu từ file save (phải có 13 phần tử)
     # Đảm bảo load có đủ phần tử, nếu không thì pad thêm
-    while len(load) < 13:
+    while len(load) < 14:
         if len(load) == 9:
-            load.extend([0, 0, 0, 0])  # Thêm: motors, u_speed, u_hp, u_missile
+            load.extend([0, 0, 0, 0, 0])
+        elif len(load) == 13:
+            load.append(0)
         else:
             load.append(0)
     
@@ -1127,16 +1129,17 @@ def loop_playing(screen, load_inf=None, difficulty=None):
         hp,
         gift_rays,
         diff_saved,
-        old_missiles,  # Số missile cũ (không dùng nữa)
+        old_missiles,
         skin_index,
         ammo,
-        motors_collected,  # Số ĐỘNG CƠ để mua đồ (INDEX 9)
+        shop_feathers,
         u_speed,
         u_hp,
         u_missile,
-    ) = load[:13]
+        ultimate_energy,
+    ) = load[:14]
 
-    shop_feathers = load[9] if len(load) > 9 else 0
+    motors_collected = 0
 
     # --- KHỞI TẠO SỐ ĐẠNLỬA ĐUỔI CHO VAN NÀY ---
     # current_missiles_count sẽ được cập nhật dựa trên motors_collected trong vòng lặp chơi
@@ -1271,7 +1274,6 @@ def loop_playing(screen, load_inf=None, difficulty=None):
     invincibility_timer = 0
     level_up_msg_timer = 0
     muzzle_flash_timer = 0
-    ultimate_energy = 0
     ultimate_storm_timer = 0
     missile_timer = 0
     screen_shake = 0
@@ -1294,8 +1296,17 @@ def loop_playing(screen, load_inf=None, difficulty=None):
     ramp = stage_ramp(lv_game)
 
     if lv_game >= len(game):
-        # Win handled at end of loop
-        return True
+        pygame.time.delay(1000)
+        screen_show_mess(screen, 'YOU WIN! Chúc mừng bạn đã hoàn thành game!')
+        pygame.time.delay(3000)
+        record_high_score(score)
+        
+        shop_feathers += motors_collected
+        w_file(
+            1, 1, 0, 5, 0, difficulty, 0, skin_index, starting_ammo(difficulty),
+            shop_feathers, u_speed, u_hp, u_missile, 0
+        )
+        return False
     egg_ms = int(
         game[lv_game][shoot_time]
         * egg_interval_mult(difficulty)
@@ -1402,8 +1413,8 @@ def loop_playing(screen, load_inf=None, difficulty=None):
             (player_target_pos[0] - player_current_pos[0]), # ship_tilt velocity
             muzzle_flash_timer,
             ultimate_energy,
-            motors_collected,
-            motors_collected,
+            shop_feathers + motors_collected,
+            shop_feathers + motors_collected,
             current_missiles_count,
             invincibility_timer
         )
@@ -1531,7 +1542,7 @@ def loop_playing(screen, load_inf=None, difficulty=None):
                         
                         shop_feathers += motors_collected
                         w_file(1, 1, 0, 5, 0, difficulty, 0, skin_index, starting_ammo(difficulty), 
-                                shop_feathers, u_speed, u_hp, u_missile)
+                                shop_feathers, u_speed, u_hp, u_missile, 0)
                         
                         # 3. Thoát trận về Menu chính
                         return False
@@ -1582,8 +1593,9 @@ def loop_playing(screen, load_inf=None, difficulty=None):
                 record_high_score(score)
                 shop_feathers += motors_collected
                 w_file(1, 1, 0, 5, 0, difficulty, 0, skin_index, starting_ammo(difficulty),
-                       shop_feathers, u_speed, u_hp, u_missile)
+                       shop_feathers, u_speed, u_hp, u_missile, 0)
                 return False
+            shop_feathers += motors_collected
             w_file(
                 lv_game,
                 lv_gun,
@@ -1594,8 +1606,8 @@ def loop_playing(screen, load_inf=None, difficulty=None):
                 current_missiles_count,
                 skin_index,
                 ammo,
-                motors_collected,
-                u_speed, u_hp, u_missile
+                shop_feathers,
+                u_speed, u_hp, u_missile, ultimate_energy
             )
             return True
 
@@ -1613,7 +1625,7 @@ def loop_playing(screen, load_inf=None, difficulty=None):
             w_file(
                 1, 1, 0, 5, 0, difficulty, current_missiles_count, 
                 skin_index, starting_ammo(difficulty), shop_feathers, 
-                u_speed, u_hp, u_missile
+                u_speed, u_hp, u_missile, ultimate_energy
             )
             return False  # Thoát trận đấu quay về Menu chính
 
@@ -1914,7 +1926,7 @@ def loop_playing(screen, load_inf=None, difficulty=None):
 
             if score // 50 > old_s // 50:
 
-                missiles += 1
+                current_missiles_count += 1
 
         check = collision(gift_inf, pl_inf)
         if check is not None:
