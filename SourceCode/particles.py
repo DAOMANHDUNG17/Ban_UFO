@@ -63,3 +63,4 @@ class ParticleManager:
     def draw(self, surface):
         for p in self.particles:
             p.draw(surface)
+#--------------------
