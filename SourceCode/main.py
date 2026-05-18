@@ -128,13 +128,16 @@ def main():
                 u_hp = prev[11] if len(prev) > 11 else 0
                 u_missile = prev[12] if len(prev) > 12 else 0
                 
-                w_file(1, 1, 0, 5, 0, difficulty, 0, sk, starting_ammo(difficulty), 0, u_speed, u_hp, u_missile)
+                w_file(1, 1, 0, 5, 0, difficulty, 0, sk, starting_ammo(difficulty), feathers, u_speed, u_hp, u_missile)
             else:
                 w_file(1, 1, 0, 5, 0, difficulty, 0, 0, starting_ammo(difficulty), 0, 0, 0, 0)
                 
+            match_coins = 0
             while True:
-                if not loop_playing(screen, r_file()): 
+                result = loop_playing(screen, r_file(), carry_match_coins=match_coins)
+                if not result:
                     break
+                match_coins = result  # continue with accumulated xu in trận across levels
         elif select_start == 2:
             show_popup(screen, 'HIGHSCORES', 'Top 10 điểm cao nhất sẽ được lưu lại!')
             highscores_menu(screen)

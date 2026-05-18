@@ -583,7 +583,7 @@ def screen_playing(screen, obj, pl_inf, ck_inf,
                    ammo=None, hit_bursts=None,
                    gift_rays_timer=0, shield_timer=0,
                    ship_tilt=0, muzzle_flash=0,
-                    ultimate_energy=0, feathers=0, motors_collected=0, current_missiles_count=0, invincibility_timer=0):
+                     ultimate_energy=0, match_coins=0, current_missiles_count=0, invincibility_timer=0):
 
     for i, j in obj:
         screen.blit(i, j)
@@ -668,14 +668,14 @@ def screen_playing(screen, obj, pl_inf, ck_inf,
     show_score_hp(
         screen,
         score,
-        motors_collected,
+        match_coins,
         hp,
         rays_per_shot,
         ammo,
         current_missiles_count,
     )
     
-    # [UPGRADE] Currency display hidden during match (only in-match motors_collected shown in HUD)
+    # [UPGRADE] Currency display hidden during match (only in-match match_coins shown in HUD)
 
     # [UPGRADE] Power-up HUD
     py_y = 305
@@ -1097,7 +1097,7 @@ def find_best_target(player_pos, ck_inf, boss_mode, boss_pos, boss_img=None):
             
     return closest_chicken
 
-def loop_playing(screen, load_inf=None, difficulty=None):
+def loop_playing(screen, load_inf=None, difficulty=None, carry_match_coins=None):
     load = load_inf
     
     if load is None:
@@ -1132,17 +1132,18 @@ def loop_playing(screen, load_inf=None, difficulty=None):
         old_missiles,
         skin_index,
         ammo,
-        shop_feathers,
+                 shop_feathers, 
         u_speed,
         u_hp,
         u_missile,
         ultimate_energy,
     ) = load[:14]
 
-    motors_collected = 0
+    shop_coins = shop_feathers  # biến riêng lưu trữ và xử lý xu cửa hàng
+    match_coins = carry_match_coins if carry_match_coins is not None else 0  # reset chỉ khi bắt đầu trận mới từ menu
 
     # --- KHỞI TẠO SỐ ĐẠNLỬA ĐUỔI CHO VAN NÀY ---
-    # current_missiles_count sẽ được cập nhật dựa trên motors_collected trong vòng lặp chơi
+    # current_missiles_count sẽ được cập nhật dựa trên match_coins trong vòng lặp chơi
     current_missiles_count = old_missiles  # Khôi phục số tên lửa còn lại từ save (nếu có)
     # -------------------------------------------------------
 
@@ -1266,8 +1267,6 @@ def loop_playing(screen, load_inf=None, difficulty=None):
     
     # Load Upgrades
     u_data = r_file()
-    # KHÔNG ghi đè motors_collected - giữ nguyên giá trị từ load parameter
-    # motors_collected đã được lấy từ load[9] ở trên
     stats = get_stat_bonus(u_data[10], u_data[11], u_data[12])
     hp = min(hp + stats['max_hp_bonus'], 5 + stats['max_hp_bonus'])
     
@@ -1301,10 +1300,10 @@ def loop_playing(screen, load_inf=None, difficulty=None):
         pygame.time.delay(3000)
         record_high_score(score)
         
-        shop_feathers += motors_collected
+        shop_coins += match_coins
         w_file(
             1, 1, 0, 5, 0, difficulty, 0, skin_index, starting_ammo(difficulty),
-            shop_feathers, u_speed, u_hp, u_missile, 0
+            shop_coins, u_speed, u_hp, u_missile, 0
         )
         return False
     egg_ms = int(
@@ -1413,8 +1412,7 @@ def loop_playing(screen, load_inf=None, difficulty=None):
             (player_target_pos[0] - player_current_pos[0]), # ship_tilt velocity
             muzzle_flash_timer,
             ultimate_energy,
-            shop_feathers + motors_collected,
-            shop_feathers + motors_collected,
+            match_coins,
             current_missiles_count,
             invincibility_timer
         )
@@ -1540,9 +1538,9 @@ def loop_playing(screen, load_inf=None, difficulty=None):
                         # 1. Hủy bỏ số đạn tên lửa đặc biệt của ván này
                         current_missiles_count = 0
                         
-                        shop_feathers += motors_collected
+                        shop_coins += match_coins
                         w_file(1, 1, 0, 5, 0, difficulty, 0, skin_index, starting_ammo(difficulty), 
-                                shop_feathers, u_speed, u_hp, u_missile, 0)
+                                shop_coins, u_speed, u_hp, u_missile, 0)
                         
                         # 3. Thoát trận về Menu chính
                         return False
@@ -1560,7 +1558,9 @@ def loop_playing(screen, load_inf=None, difficulty=None):
 
             if boss_hp <= 0:
                 stage_clear = True
-                motors_collected += 50 # Boss gives 50 motors!
+                match_coins += 50 # Boss gives 50 motors!
+                if match_coins % 50 == 0:
+                    current_missiles_count += 1
 
         elif meteor_mode:
 
@@ -1591,11 +1591,12 @@ def loop_playing(screen, load_inf=None, difficulty=None):
                 screen_show_mess(screen, 'YOU WIN! Chúc mừng bạn đã hoàn thành game!')
                 pygame.time.delay(3000)
                 record_high_score(score)
-                shop_feathers += motors_collected
+                shop_coins += match_coins
                 w_file(1, 1, 0, 5, 0, difficulty, 0, skin_index, starting_ammo(difficulty),
-                       shop_feathers, u_speed, u_hp, u_missile, 0)
+                       shop_coins, u_speed, u_hp, u_missile, 0)
                 return False
-            shop_feathers += motors_collected
+
+            # Save progress for next level (không cộng shop_coins ở đây)
             w_file(
                 lv_game,
                 lv_gun,
@@ -1606,10 +1607,10 @@ def loop_playing(screen, load_inf=None, difficulty=None):
                 current_missiles_count,
                 skin_index,
                 ammo,
-                shop_feathers,
+                shop_coins,
                 u_speed, u_hp, u_missile, ultimate_energy
             )
-            return True
+            return match_coins  # carry xu trận sang level tiếp theo (chưa cộng shop)
 
         if (not meteor_mode and count <= 0) or hp <= 0:
             screen_show_mess(screen, 'GAME OVER - Tên lửa đuổi trận sau sẽ tính lại')
@@ -1621,10 +1622,10 @@ def loop_playing(screen, load_inf=None, difficulty=None):
             # Reset tên lửa đuổi của ván này về 0 khi thua
             current_missiles_count = 0
             
-            shop_feathers += motors_collected
+            shop_coins += match_coins
             w_file(
                 1, 1, 0, 5, 0, difficulty, current_missiles_count, 
-                skin_index, starting_ammo(difficulty), shop_feathers, 
+                skin_index, starting_ammo(difficulty), shop_coins, 
                 u_speed, u_hp, u_missile, ultimate_energy
             )
             return False  # Thoát trận đấu quay về Menu chính
@@ -1783,9 +1784,9 @@ def loop_playing(screen, load_inf=None, difficulty=None):
                     missile_inf['items'].pop(mi)
                     # Gain energy and money from destroying meteors
                     ultimate_energy = min(100, ultimate_energy + 10)
-                    motors_collected += 8 # Meteors give 8 motors
+                    match_coins += 8 # Meteors give 8 motors
                     # Cập nhật số tên lửa nếu chia hết cho 50
-                    if motors_collected > 0 and motors_collected % 50 == 0:
+                    if match_coins > 0 and match_coins % 50 == 0:
                         current_missiles_count += 1
                     if random.random() < GIFT_DROP_RATE:
                         gift_inf['pos'].append(m_pos)
@@ -1954,11 +1955,11 @@ def loop_playing(screen, load_inf=None, difficulty=None):
                 hp += 1
                 particle_manager.emit(pl_inf['pos'][0], color=(255, 100, 100), count=15)
             elif g_type == 'motor':
-                motors_collected += 1
+                match_coins += 1
                 ultimate_energy = min(100, ultimate_energy + 2)
                 particle_manager.emit(pl_inf['pos'][0], color=(255, 215, 0), count=15)
                 # Kiểm tra nếu đạt mốc 50 thì tặng 1 tên lửa
-                if motors_collected > 0 and motors_collected % 50 == 0:
+                if match_coins > 0 and match_coins % 50 == 0:
                     current_missiles_count += 1
                 
             collision_sound.play()
@@ -2000,9 +2001,9 @@ def loop_playing(screen, load_inf=None, difficulty=None):
         pygame.time.delay(3000)
         record_high_score(score)
         
-        shop_feathers += motors_collected
+        shop_coins += match_coins
         w_file(
             1, 1, 0, 5, 0, difficulty, 0, skin_index, starting_ammo(difficulty),
-            shop_feathers, u_speed, u_hp, u_missile
+            shop_coins, u_speed, u_hp, u_missile
         )
     return False
