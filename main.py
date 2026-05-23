@@ -1,26 +1,49 @@
 import pygame
+import asyncio
+import os
+
+from process import (
+    close,
+    create_game,
+    create_menu,
+    hangar_menu,
+    loop_playing,
+    r_file,
+    w_file,
+    highscores_menu,
+    shop_menu,
+)
+from var import (
+    menu_difficulty,
+    menu_load,
+    menu_start,
+    save_file_path,
+    starting_ammo,
+    get_img,
+    text,
+)
 
 # Hiệu ứng chuyển cảnh fade in/out
-def fade_in(screen, color=(0,0,0), speed=10):
+async def fade_in(screen, color=(0,0,0), speed=10):
     fade = pygame.Surface(screen.get_size())
     fade.fill(color)
     for alpha in range(255, -1, -speed):
         fade.set_alpha(alpha)
         screen.blit(fade, (0,0))
         pygame.display.update()
-        pygame.time.delay(5)
+        await asyncio.sleep(0.005) # Thay thế delay(5) bằng sleep để không chặn trình duyệt
 
-def fade_out(screen, color=(0,0,0), speed=10):
+async def fade_out(screen, color=(0,0,0), speed=10):
     fade = pygame.Surface(screen.get_size())
     fade.fill(color)
     for alpha in range(0, 256, speed):
         fade.set_alpha(alpha)
         screen.blit(fade, (0,0))
         pygame.display.update()
-        pygame.time.delay(5)
+        await asyncio.sleep(0.005)
 
 # Popup thông báo
-def show_popup(screen, title, message, color='Gold', size=60):
+async def show_popup(screen, title, message, color='Gold', size=60):
     bg = pygame.Surface(screen.get_size(), pygame.SRCALPHA)
     bg.fill((0,0,0,180))
     screen.blit(bg, (0,0))
@@ -33,10 +56,10 @@ def show_popup(screen, title, message, color='Gold', size=60):
     screen.blit(title_surf, (screen.get_width()//2-title_surf.get_width()//2, 200))
     screen.blit(msg_surf, (screen.get_width()//2-msg_surf.get_width()//2, 320))
     pygame.display.update()
-    pygame.time.delay(1800)
+    await asyncio.sleep(1.8) # Thay vì delay(1800), ta cho trình duyệt chờ 1.8 giây
 
 # Hướng dẫn chơi
-def show_how_to_play(screen):
+async def show_how_to_play(screen):
     bg = get_img('bg')
     fps = pygame.time.Clock()
     font_name = 'segoe ui,tahoma,arial'
@@ -82,75 +105,58 @@ def show_how_to_play(screen):
                 close()
             if event.type in (pygame.KEYDOWN, pygame.MOUSEBUTTONDOWN):
                 return
-from process import (
-    close,
-    create_game,
-    create_menu,
-    hangar_menu,
-    loop_playing,
-    r_file,
-    w_file,
-    highscores_menu,
-    shop_menu,
-)
-from var import (
-    menu_difficulty,
-    menu_load,
-    menu_start,
-    save_file_path,
-    starting_ammo,
-    get_img,
-    text,
-)
-import os
+                
+        # Phải có dòng này trong bất kỳ vòng lặp while True nào
+        await asyncio.sleep(0) 
 
-import pygame
-
-
-def main():
+async def main():
     screen = create_game('ChickenInvader')
-    fade_in(screen)
+    await fade_in(screen)
     while True:
-        select_start = create_menu(screen, menu_start(), highlight_color=(255, 215, 0), shadow=True)
+        select_start = await create_menu(screen, menu_start(), highlight_color=(255, 215, 0), shadow=True)
         if select_start == 1:
-            diff_sel = create_menu(screen, menu_difficulty(), highlight_color=(0, 255, 255), shadow=True)
+            diff_sel = await create_menu(screen, menu_difficulty(), highlight_color=(0, 255, 255), shadow=True)
             if diff_sel == 4: # 'Back' button in difficulty menu
                 continue
             
             difficulty = diff_sel
             if os.path.exists(save_file_path()):
-                select_load = create_menu(screen, menu_load(), highlight_color=(0, 255, 0), shadow=True)
+                select_load = await create_menu(screen, menu_load(), highlight_color=(0, 255, 0), shadow=True)
                 if select_load == 3: # 'Back' button in load menu
                     continue
                 
                 if select_load == 1: # Previous Level
-                    fade_out(screen)
+                    await fade_out(screen)
                     while True:
-                        if not loop_playing(screen, r_file()): break
+                        if not await loop_playing(screen, r_file()): break
+                        await asyncio.sleep(0)
                 else: # New Game (select_load == 2)
                     prev = r_file()
                     sk = prev[7] if len(prev) > 7 else 0
                     w_file(1, 1, 0, 5, 0, difficulty, 0, sk, starting_ammo(difficulty))
-                    fade_out(screen)
+                    await fade_out(screen)
                     while True:
-                        if not loop_playing(screen, r_file()): break
+                        if not await loop_playing(screen, r_file()): break
+                        await asyncio.sleep(0)
             else:
-                fade_out(screen)
+                await fade_out(screen)
                 w_file(1, 1, 0, 5, 0, difficulty, 0, 0, starting_ammo(difficulty))
                 while True:
-                    if not loop_playing(screen, r_file()): break
+                    if not await loop_playing(screen, r_file()): break
+                    await asyncio.sleep(0)
         elif select_start == 2:
-            show_popup(screen, 'HIGHSCORES', 'Top 10 điểm cao nhất sẽ được lưu lại!')
-            highscores_menu(screen)
+            await show_popup(screen, 'HIGHSCORES', 'Top 10 điểm cao nhất sẽ được lưu lại!')
+            await highscores_menu(screen)
         elif select_start == 3:
-            hangar_menu(screen)
+            await hangar_menu(screen)
         elif select_start == 4:
-            shop_menu(screen)
+            await shop_menu(screen)
         elif select_start == 5:
-            show_how_to_play(screen)
+            await show_how_to_play(screen)
         elif select_start == 6:
             close()
-
+            
+        await asyncio.sleep(0)
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
