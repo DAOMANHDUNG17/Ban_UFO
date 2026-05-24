@@ -1,9 +1,8 @@
 import os
-
 import pygame
 
-_ROOT = os.path.dirname(os.path.abspath(__file__))
-_DATA = os.path.join(_ROOT, 'Data')
+# 1. FIX ĐƯỜNG DẪN: Dùng đường dẫn tương đối để Web không bị nhầm lẫn
+_DATA = 'Data'
 
 GIFT_DROP_RATE = 0.08
 MAX_GIFTS_PER_STAGE = 2
@@ -12,26 +11,20 @@ EGG_AMMO_LOSS = 8
 BIG_EGG_AMMO_LOSS = 14
 GIFT_AMMO_BONUS = 50
 
-
 def starting_ammo(difficulty):
     return {1: 200, 2: 150, 3: 100}[difficulty]
-
 
 def save_file_path():
     return os.path.join(_DATA, 'save', 'save.txt')
 
-
 def highscores_file_path():
     return os.path.join(_DATA, 'save', 'highscores.txt')
-
 
 def max_rays_per_shot():
     return 6
 
-
 def _img_path(name):
     return os.path.join(_DATA, 'image', name)
-
 
 def ship_skin_filenames():
     return [
@@ -40,7 +33,6 @@ def ship_skin_filenames():
         'spaceship_green.png',
         'spaceship_red.png',
     ]
-
 
 def all_img():
     return {
@@ -55,7 +47,6 @@ def all_img():
         'explode': _img_path('explode.png'),
         'gift': _img_path('gift.png'),
     }
-
 
 def all_size():
     item_size = (50, 50)
@@ -77,16 +68,14 @@ def all_size():
         'title': 100
     }
 
-
 def all_music():
-    dir_music = os.path.join(_DATA, 'Music')  # Đổi chữ m thành M
+    dir_music = os.path.join(_DATA, 'Music')
     return {
         'bg': os.path.join(dir_music, 'level1.ogg'),
         'shoot': os.path.join(dir_music, 'shoot.wav'),
-        'explode_ck': os.path.join(dir_music, 'Chicken.ogg'), # Cả chữ C này cũng viết hoa theo đúng tên file tải lên
+        'explode_ck': os.path.join(dir_music, 'Chicken.ogg'),
         'collision': os.path.join(dir_music, 'boom.wav'),
     }
-
 
 def all_position():
     return {
@@ -96,7 +85,6 @@ def all_position():
         'pause': (1250, 5),
         'main_menu': (500, 100)
     }
-
 
 _FONTS = {}
 
@@ -113,8 +101,8 @@ def text(string='Unknown', size=50, color='Yellow', underline=False, bold=False,
         f.set_italic(italic)
         _FONTS[font_key] = f
     
-    return _FONTS[font_key].render(string, smooth, color).convert_alpha()
-
+    # 2. FIX CHỮ: Loại bỏ .convert_alpha() để không báo lỗi NoneType
+    return _FONTS[font_key].render(string, smooth, color)
 
 _IMG_CACHE = {}
 
@@ -123,148 +111,110 @@ def get_img(name_img='bg', name_size=None):
         name_size = name_img
     cache_key = (name_img, name_size)
     if cache_key not in _IMG_CACHE:
-        img = all_img()
-        size = all_size()
-        x = pygame.image.load(img[name_img]).convert_alpha()
-        _IMG_CACHE[cache_key] = pygame.transform.scale(x, size[name_size])
+        img_dict = all_img()
+        size_dict = all_size()
+        
+        try:
+            # 3. FIX ẢNH: Loại bỏ convert_alpha và thêm cơ chế an toàn
+            x = pygame.image.load(img_dict[name_img])
+            scaled = pygame.transform.scale(x, size_dict[name_size])
+            if scaled is None:  # Phòng ngừa lỗi scale trên WebGL
+                scaled = x
+            _IMG_CACHE[cache_key] = scaled
+        except Exception as e:
+            print(f"Loi tai anh {name_img}: {e}")
+            # Nếu web không tìm thấy ảnh, tạo một khối màu thay thế để game không bị treo
+            fallback = pygame.Surface(size_dict[name_size])
+            fallback.fill((30, 30, 40))
+            _IMG_CACHE[cache_key] = fallback
+            
     return _IMG_CACHE[cache_key]
 
-
 def make_player_ship(skin_index):
-
     w, h = all_size()['player']
-
     s = pygame.Surface((w, h), pygame.SRCALPHA)
-
     palettes = [
         ((50, 200, 255), (10, 100, 255), (200, 255, 255)),
         ((255, 100, 50), (200, 40, 10), (255, 220, 150)),
         ((100, 255, 150), (20, 180, 80), (200, 255, 220)),
         ((255, 100, 220), (180, 20, 120), (255, 200, 240)),
     ]
-
     main, dark, light = palettes[skin_index % len(palettes)]
-
-    # Main Body Base
     pygame.draw.polygon(s, (80, 90, 100), [(w//2, 2), (w-8, h//2+5), (w//2, h-5), (8, h//2+5)])
-    
-    # Wings
     pygame.draw.polygon(s, dark, [(w//2, 10), (w-2, h-10), (w-12, h-4), (w//2, h-16)])
     pygame.draw.polygon(s, dark, [(w//2, 10), (2, h-10), (12, h-4), (w//2, h-16)])
-
-    # Cockpit
     pygame.draw.polygon(s, main, [(w//2, 15), (w//2+12, h//2+10), (w//2-12, h//2+10)])
     pygame.draw.ellipse(s, (180, 230, 255, 200), (w//2-6, 18, 12, 18))
-
-    # Engines
     pygame.draw.circle(s, (255, 150, 50), (w//2-8, h-5), 4)
     pygame.draw.circle(s, (255, 150, 50), (w//2+8, h-5), 4)
     pygame.draw.circle(s, (255, 255, 255), (w//2-8, h-3), 2)
     pygame.draw.circle(s, (255, 255, 255), (w//2+8, h-3), 2)
-
-    # Laser blasters
     pygame.draw.line(s, light, (8, h//2+5), (8, 10), 2)
     pygame.draw.line(s, light, (w-8, h//2+5), (w-8, 10), 2)
-
-    return s.convert_alpha()
-
+    return s
 
 def make_enemy_sprite(variant=0):
-
     w, h = all_size()['chicken']
-
     s = pygame.Surface((w, h), pygame.SRCALPHA)
-
     skins = [
         ((180, 80, 255), (100, 20, 200), (0, 255, 255)),
         ((255, 80, 110), (180, 20, 50), (255, 255, 0)),
         ((80, 200, 170), (20, 120, 90), (255, 0, 255)),
         ((255, 190, 60), (180, 100, 20), (0, 255, 0)),
     ]
-
     body, shadow, light = skins[variant % len(skins)]
-
-    # Glass dome (more 3D)
     pygame.draw.ellipse(s, (150, 200, 255, 150), (w // 2 - 14, 5, 28, 24))
     pygame.draw.ellipse(s, (220, 240, 255, 200), (w // 2 - 8, 8, 12, 10))
-
-    # UFO Body (metallic rings)
     pygame.draw.ellipse(s, (60, 60, 70), (2, 20, w - 4, 18))
     pygame.draw.ellipse(s, shadow, (4, 21, w - 8, 16))
     pygame.draw.ellipse(s, body, (6, 22, w - 12, 14))
     pygame.draw.ellipse(s, (200, 200, 200, 100), (8, 23, w - 16, 6))
-
-    # Base dome
     pygame.draw.ellipse(s, (50, 50, 60), (w // 2 - 10, 32, 20, 8))
-
-    # Lights (more detailed)
     pygame.draw.circle(s, light, (10, 29), 3)
     pygame.draw.circle(s, (255, 255, 255), (10, 29), 1)
-    
     pygame.draw.circle(s, light, (w // 2, 32), 4)
     pygame.draw.circle(s, (255, 255, 255), (w // 2, 32), 2)
-    
     pygame.draw.circle(s, light, (w - 10, 29), 3)
     pygame.draw.circle(s, (255, 255, 255), (w - 10, 29), 1)
-
-    return s.convert_alpha()
-
+    return s
 
 def make_meteor_egg(big=False):
-
     w, h = (56, 72) if big else all_size()['egg']
-
     s = pygame.Surface((w, h), pygame.SRCALPHA)
-
     pygame.draw.ellipse(s, (140, 110, 95), (2, 4, w - 4, h - 8))
-
     pygame.draw.ellipse(s, (190, 170, 140), (4, 6, w - 8, h - 12))
-
     for ox, oy in [(8, 14), (w - 14, 20), (w // 2, h - 12)]:
-
         pygame.draw.circle(s, (100, 80, 70), (ox, oy), 4)
-
-    return s.convert_alpha()
-
+    return s
 
 def load_ship_skin(index):
-
     return make_player_ship(index)
-
 
 def load_ship_skin_png_fallback(index):
-
     names = ship_skin_filenames()
-
     idx = max(0, min(len(names) - 1, index))
-
     path = _img_path(names[idx])
-
     size = all_size()['player']
-
     if os.path.isfile(path):
-
-        raw = pygame.image.load(path).convert_alpha()
-
-        return pygame.transform.scale(raw, size)
-
+        try:
+            raw = pygame.image.load(path)
+            return pygame.transform.scale(raw, size)
+        except:
+            pass
     return make_player_ship(index)
-
 
 def gift_placeholder_img():
     s = pygame.Surface(all_size()['gift'], pygame.SRCALPHA)
     pygame.draw.rect(s, (160, 82, 45), (6, 14, 38, 28))
     pygame.draw.rect(s, (218, 165, 32), (10, 8, 30, 12))
     pygame.draw.rect(s, (180, 40, 40), (14, 22, 22, 14))
-    return s.convert_alpha()
-
+    return s
 
 def get_gift_img():
     path = all_img()['gift']
     if os.path.isfile(path):
         return get_img('gift')
     return gift_placeholder_img()
-
 
 def menu_start():
     size = all_size()
@@ -278,7 +228,6 @@ def menu_start():
         text('Thoát game', size['font'], 'Yellow', True),
     ]
 
-
 def menu_difficulty():
     size = all_size()
     return [
@@ -289,7 +238,6 @@ def menu_difficulty():
         text('Quay lại', size['font'], 'White', True),
     ]
 
-
 def menu_load():
     size = all_size()
     return [
@@ -298,7 +246,6 @@ def menu_load():
         text('Chơi mới', size['font'], 'Yellow', True),
         text('Quay lại', size['font'], 'White', True),
     ]
-
 
 def menu_pause():
     size = all_size()
@@ -309,13 +256,9 @@ def menu_pause():
         text('Thoát ra Menu', size['font'], 'White', True)
     ]
 
-
 def player_inf(skin_index=0):
-
     pl = load_ship_skin(skin_index)
-
     explode = get_img('explode')
-
     return {
         'img': pl,
         'img_explode': explode,
@@ -364,14 +307,12 @@ def r_file():
         for line in file:
             line = line.strip()
             if line != '': x.append(int(line))
-    # Migration/Padding
     while len(x) < 13:
-        if len(x) == 9: x.extend([0, 0, 0, 0]) # Add feathers & upgrades
+        if len(x) == 9: x.extend([0, 0, 0, 0])
         else: x.append(0)
     return x
 
 def upgrade_costs(level):
-    # Tiered pricing: level 0 -> 50, 1 -> 250, 2 -> 550, 3 -> 950...
     return 50 + (level * 200) + (level**2 * 100)
 
 def get_stat_bonus(u_speed, u_hp, u_missile):
@@ -382,11 +323,8 @@ def get_stat_bonus(u_speed, u_hp, u_missile):
     }
 
 def chicken_inf(enemy_variant=0):
-
     ck = make_enemy_sprite(enemy_variant)
-
     explode = get_img('explode')
-
     return {
         'img': ck,
         'img_explode': explode,
@@ -398,7 +336,6 @@ def chicken_inf(enemy_variant=0):
         'time_offset': [],
     }
 
-
 def laser_inf():
     ls = get_img('laser')
     return {
@@ -407,30 +344,23 @@ def laser_inf():
         'pos': []
     }
 
-
 def eg_inf():
-
     egg = make_meteor_egg(big=False)
-
     return {
         'img': egg,
         'rect': egg.get_rect(),
         'pos': [],
         'direct': [],
     }
-
 
 def eg_inf_big():
-
     egg = make_meteor_egg(big=True)
-
     return {
         'img': egg,
         'rect': egg.get_rect(),
         'pos': [],
         'direct': [],
     }
-
 
 def sc_inf():
     sc = get_img('score', 'egg')
@@ -440,7 +370,6 @@ def sc_inf():
         'pos': []
     }
 
-
 def gift_pickup_inf():
     g = get_gift_img()
     return {
@@ -448,7 +377,6 @@ def gift_pickup_inf():
         'rect': g.get_rect(),
         'pos': [],
     }
-
 
 def obj_default_playing():
     pos = all_position()
@@ -468,9 +396,7 @@ def obj_default_playing():
         ],
     ]
 
-
 def game_level():
-    """Mỗi màn: [tốc_độ_trứng_ms, số_gà, dự_phòng, thời_gian_s, mốc_+HP, mốc_nâng_súng]."""
     return [
         [],
         [1500, 28, 1, 85, 10, 25],
@@ -494,7 +420,6 @@ def game_level():
         [280, 60, 4, 48, 12, 420],
         [260, 64, 4, 45, 12, 440],
     ]
-
 
 def gun_level():
     return [
