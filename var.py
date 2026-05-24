@@ -285,32 +285,39 @@ def w_file(
 ):
     if ammo is None:
         ammo = starting_ammo(2)
-    path = save_file_path()
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    data = [
-        f"{lv_game}\n", f"{lv_gun}\n", f"{score}\n", f"{hp}\n",
-        f"{gift_rays}\n", f"{difficulty}\n", f"{missiles}\n",
-        f"{skin_index}\n", f"{ammo}\n", f"{feathers}\n",
-        f"{u_speed}\n", f"{u_hp}\n", f"{u_missile}\n",
-    ]
-    with open(path, 'w') as file:
-        file.writelines(data)
+    try:
+        path = save_file_path()
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        data = [
+            f"{lv_game}\n", f"{lv_gun}\n", f"{score}\n", f"{hp}\n",
+            f"{gift_rays}\n", f"{difficulty}\n", f"{missiles}\n",
+            f"{skin_index}\n", f"{ammo}\n", f"{feathers}\n",
+            f"{u_speed}\n", f"{u_hp}\n", f"{u_missile}\n",
+        ]
+        with open(path, 'w') as file:
+            file.writelines(data)
+    except Exception as e:
+        print(f"Error writing save file: {e}")
 
 def r_file():
     path = save_file_path()
+    default_data = [1, 1, 0, 5, 0, 2, 0, 0, starting_ammo(2), 0, 0, 0, 0]
     if not os.path.exists(path):
-        d = [1, 1, 0, 5, 0, 2, 0, 0, starting_ammo(2), 0, 0, 0, 0]
-        w_file(*d)
-        return d
-    x = []
-    with open(path) as file:
-        for line in file:
-            line = line.strip()
-            if line != '': x.append(int(line))
-    while len(x) < 13:
-        if len(x) == 9: x.extend([0, 0, 0, 0])
-        else: x.append(0)
-    return x
+        w_file(*default_data)
+        return default_data
+    try:
+        x = []
+        with open(path) as file:
+            for line in file:
+                line = line.strip()
+                if line != '': x.append(int(line))
+        while len(x) < 13:
+            if len(x) == 9: x.extend([0, 0, 0, 0])
+            else: x.append(0)
+        return x
+    except Exception as e:
+        print(f"Error reading save file: {e}")
+        return default_data
 
 def upgrade_costs(level):
     return 50 + (level * 200) + (level**2 * 100)

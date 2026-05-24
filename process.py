@@ -50,14 +50,17 @@ def read_highscores():
         return []
 
 def record_high_score(score):
-    scores = read_highscores()
-    scores.append(score)
-    scores.sort(reverse=True)
-    path = highscores_file_path()
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, 'w') as f:
-        for s in scores[:10]:
-            f.write(f"{s}\n")
+    try:
+        scores = read_highscores()
+        scores.append(score)
+        scores.sort(reverse=True)
+        path = highscores_file_path()
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, 'w') as f:
+            for s in scores[:10]:
+                f.write(f"{s}\n")
+    except Exception as e:
+        print(f"Error recording high score: {e}")
 
 def add_pos_menu(obj_menu):
     sw = 1366 # Default screen width
@@ -839,7 +842,7 @@ async def loop_playing(screen, load_inf=None, difficulty=None):
     await asyncio.sleep(2)
 
     fps = pygame.time.Clock()
-    Max = pygame.display.get_window_size()
+    Max = screen.get_size()
     music = all_music()
 
     pl_inf = player_inf(skin_index)
