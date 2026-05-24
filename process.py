@@ -7,12 +7,26 @@ import os
 import pygame
 import asyncio  # THÊM THƯ VIỆN NÀY DÀNH CHO WEB
 
+# --- HỆ THỐNG LÁ CHẮN BẢO VỆ ÂM THANH TRÊN WEB ---
+class DummySound:
+    def play(self, *args, **kwargs): pass
+    def set_volume(self, *args, **kwargs): pass
+    def stop(self): pass
+
+def load_music(path, vol):
+    try:
+        sound = pygame.mixer.Sound(path)
+        sound.set_volume(vol)
+        return sound
+    except:
+        return DummySound() # Đánh lừa trình duyệt nếu không đọc được đuôi .wav
+
+# =================================================
+
 def create_game(name):
     pygame.init()
-
     screen = pygame.display.set_mode((1366, 768))
     pygame.display.set_caption(name)
-
     icon_path = os.path.normpath(
         os.path.join(os.path.dirname(save_file_path()), '..', 'image', 'chicken.png')
     )
@@ -20,7 +34,6 @@ def create_game(name):
         pygame.display.set_icon(pygame.image.load(icon_path).convert_alpha())
 
     load_music(all_music()['bg'], 0.2).play(-1)
-
     return screen
 
 
@@ -56,15 +69,13 @@ def add_pos_menu(obj_menu):
     return new_arr
 
 
-# --- ĐỔI SANG ASYNC ---
 async def create_menu(screen, menu, highlight_color=(255, 215, 0), shadow=False):
     obj = add_pos_menu(menu)
     bg = get_img('bg')
     signal = text('>>>', 50, 'White')
     fps = pygame.time.Clock()
     select = 1
-    click_sound = pygame.mixer.Sound(all_music()['shoot'])
-    click_sound.set_volume(0.1)
+    click_sound = load_music(all_music()['shoot'], 0.1) # Dùng lá chắn âm thanh
     
     while True:
         fps.tick(30)
@@ -105,7 +116,6 @@ async def create_menu(screen, menu, highlight_color=(255, 215, 0), shadow=False)
         
         await asyncio.sleep(0)  # THÊM NHƯỜNG LUỒNG
 
-# --- ĐỔI SANG ASYNC ---
 async def highscores_menu(screen):
     bg = get_img('bg')
     fps = pygame.time.Clock()
@@ -140,9 +150,8 @@ async def highscores_menu(screen):
                 if event.key in (pygame.K_RETURN, pygame.K_ESCAPE):
                     return
         
-        await asyncio.sleep(0)  # THÊM NHƯỜNG LUỒNG
+        await asyncio.sleep(0)
 
-# --- ĐỔI SANG ASYNC ---
 async def shop_menu(screen):
     bg = get_img('bg')
     fps = pygame.time.Clock()
@@ -208,7 +217,7 @@ async def shop_menu(screen):
                 data[9] -= upg['cost']
                 data[upg['idx']] += 1
                 w_file(*data)
-                await asyncio.sleep(0.2)  # Thay pygame.time.delay bằng asyncio
+                await asyncio.sleep(0.2)
         
         back_btn = pygame.Rect(screen.get_width()//2 - 100, 650, 200, 50)
         back_hover = back_btn.collidepoint(mx, my)
@@ -221,9 +230,8 @@ async def shop_menu(screen):
         for event in pygame.event.get():
             if event.type == pygame.QUIT: close()
             
-        await asyncio.sleep(0)  # THÊM NHƯỜNG LUỒNG
+        await asyncio.sleep(0)
 
-# --- ĐỔI SANG ASYNC ---
 async def hangar_menu(screen):
     bg = get_img('bg')
     data = list(r_file())
@@ -274,7 +282,7 @@ async def hangar_menu(screen):
                 elif event.key == pygame.K_ESCAPE:
                     return
 
-        await asyncio.sleep(0)  # THÊM NHƯỜNG LUỒNG
+        await asyncio.sleep(0)
 
 
 def missile_weapon_inf():
@@ -363,11 +371,6 @@ def roll_chicken_drop(gifts_spawned):
 def close():
     pygame.quit()
     exit()
-
-def load_music(path, vol):
-    sound = pygame.mixer.Sound(path)
-    sound.set_volume(vol)
-    return sound
 
 def change_pos(tuple_1, tuple_2):
     return tuple(a + b for a, b in zip(tuple_1, tuple_2))
@@ -735,7 +738,6 @@ def apply_screen_shake(offset, magnitude=5):
     return (random.randint(-magnitude, magnitude), random.randint(-magnitude, magnitude))
 
 
-# --- ĐỔI SANG ASYNC ---
 async def game_over_screen(screen, score):
     bg = get_img('bg')
     f_name = 'segoe ui,tahoma,arial'
@@ -758,7 +760,7 @@ async def game_over_screen(screen, score):
             if event.type == pygame.QUIT: close()
             if event.type == pygame.KEYDOWN or event.type == pygame.MOUSEBUTTONDOWN:
                 return
-        await asyncio.sleep(0)  # THÊM NHƯỜNG LUỒNG
+        await asyncio.sleep(0)
                 
 def show_popup(screen, title, message):
     pass
@@ -783,7 +785,6 @@ def find_best_target(player_pos, ck_inf, boss_mode, boss_pos, boss_img=None):
     return closest_chicken
 
 
-# --- ĐỔI SANG ASYNC ---
 async def loop_playing(screen, load_inf=None, difficulty=None):
     load = load_inf
     if load is None:
@@ -835,7 +836,7 @@ async def loop_playing(screen, load_inf=None, difficulty=None):
     else: msg = f"MÀN {lv_game}"
 
     screen_show_mess(screen, msg)
-    await asyncio.sleep(2)  # THAY ĐỔI: pygame.time.delay -> await asyncio.sleep
+    await asyncio.sleep(2)
 
     fps = pygame.time.Clock()
     Max = pygame.display.get_window_size()
@@ -895,6 +896,7 @@ async def loop_playing(screen, load_inf=None, difficulty=None):
     shield_timer = 0
     shoot_cooldown = 0 
 
+    # --- SỬ DỤNG LÁ CHẮN ÂM THANH TRONG LÚC CHƠI ---
     laser_sound = load_music(music['shoot'], 0.05)
     boom_sound = load_music(music['explode_ck'], 0.05)
     collision_sound = load_music(music['collision'], 0.05)
@@ -1008,7 +1010,6 @@ async def loop_playing(screen, load_inf=None, difficulty=None):
                         laser_sound.play()
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
-                    # THÊM await VÀO HÀM GỌI MENU
                     choose = await create_menu(screen, menu_pause())
                     if choose == 2: break
                     elif choose == 3:
@@ -1020,7 +1021,7 @@ async def loop_playing(screen, load_inf=None, difficulty=None):
                     ultimate_storm_timer = 240
                     screen_shake = 30
                     screen_show_mess(screen, "ULTIMATE! LASER STORM ACTIVATED!")
-                    await asyncio.sleep(0.5)  # THAY ĐỔI: pygame.time.delay -> await asyncio.sleep
+                    await asyncio.sleep(0.5)
 
         stage_clear = False
         if boss_mode:
@@ -1036,10 +1037,10 @@ async def loop_playing(screen, load_inf=None, difficulty=None):
         if stage_clear:
             if boss_mode:
                 screen_show_mess(screen, "CHIẾN THẮNG BOSS! CHÚC MỪNG BẠN!")
-                await asyncio.sleep(3)  # THAY ĐỔI: pygame.time.delay -> await asyncio.sleep
+                await asyncio.sleep(3)
             else:
                 screen_show_mess(screen, f"HOÀN THÀNH MÀN {lv_game}!")
-                await asyncio.sleep(1.5)  # THAY ĐỔI: pygame.time.delay -> await asyncio.sleep
+                await asyncio.sleep(1.5)
 
             lv_game += 1
             ammo += (25 + lv_game * 5)
@@ -1048,7 +1049,7 @@ async def loop_playing(screen, load_inf=None, difficulty=None):
 
         if (not meteor_mode and count <= 0) or hp <= 0:
             screen_show_mess(screen, 'YOU LOSE')
-            await asyncio.sleep(3)  # THAY ĐỔI: pygame.time.delay -> await asyncio.sleep
+            await asyncio.sleep(3)
             pygame.time.set_timer(egg_speed, 0)
             pygame.time.set_timer(countdown, 0)
             record_high_score(score)
@@ -1289,10 +1290,10 @@ async def loop_playing(screen, load_inf=None, difficulty=None):
             current_missiles_count = 0
             w_file(1, 1, 0, 5, 0, difficulty, 0, skin_index, starting_ammo(difficulty), motors_collected, u_data[10], u_data[11], u_data[12])
             screen_show_mess(screen, 'GAME OVER - Tên lửa đuổi trận sau sẽ tính lại')
-            await asyncio.sleep(2)  # THAY ĐỔI: pygame.time.delay -> await asyncio.sleep
+            await asyncio.sleep(2)
             return False 
 
-        await asyncio.sleep(0)  # THÊM NHƯỜNG LUỒNG CHO WEB
+        await asyncio.sleep(0) 
 
     if load[0] < len(game):
         return True 
@@ -1300,7 +1301,7 @@ async def loop_playing(screen, load_inf=None, difficulty=None):
         pygame.time.set_timer(egg_speed, 0)
         pygame.time.set_timer(countdown, 0)
         screen_show_mess(screen, 'YOU WIN! Chúc mừng bạn đã hoàn thành game!')
-        await asyncio.sleep(3)  # THAY ĐỔI: pygame.time.delay -> await asyncio.sleep
+        await asyncio.sleep(3)
         record_high_score(score)
         w_file(1, 1, 0, 5, 0, 2, 0, skin_index, starting_ammo(2), motors_collected, u_data[10], u_data[11], u_data[12])
     return False
