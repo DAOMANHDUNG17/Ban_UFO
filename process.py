@@ -14,6 +14,9 @@ class DummySound:
     def stop(self): pass
 
 def load_music(path, vol):
+    import sys
+    if sys.platform == 'emscripten':
+        return DummySound()
     try:
         sound = pygame.mixer.Sound(path)
         sound.set_volume(vol)
