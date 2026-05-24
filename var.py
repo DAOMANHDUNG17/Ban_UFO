@@ -83,7 +83,7 @@ def all_music():
     return {
         'bg': os.path.join(dir_music, 'level1.ogg'),
         'shoot': os.path.join(dir_music, 'shoot.wav'),
-        'explode_ck': os.path.join(dir_music, 'Chicken.mp3'), # Cả chữ C này cũng viết hoa theo đúng tên file tải lên
+        'explode_ck': os.path.join(dir_music, 'Chicken.ogg'), # Cả chữ C này cũng viết hoa theo đúng tên file tải lên
         'collision': os.path.join(dir_music, 'boom.wav'),
     }
 
