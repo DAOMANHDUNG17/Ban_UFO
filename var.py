@@ -72,9 +72,9 @@ def all_music():
     dir_music = os.path.join(_DATA, 'Music')
     return {
         'bg': os.path.join(dir_music, 'level1.ogg'),
-        'shoot': os.path.join(dir_music, 'shoot.wav'),
+        'shoot': os.path.join(dir_music, 'shoot.ogg'),
         'explode_ck': os.path.join(dir_music, 'Chicken.ogg'),
-        'collision': os.path.join(dir_music, 'boom.wav'),
+        'collision': os.path.join(dir_music, 'boom.ogg'),
     }
 
 def all_position():

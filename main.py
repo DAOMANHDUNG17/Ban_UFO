@@ -1,6 +1,19 @@
 import pygame
 import asyncio
 import os
+import sys
+
+if sys.platform == 'emscripten':
+    import platform
+    def custom_excepthook(type, value, traceback):
+        import traceback as tb
+        err_msg = "".join(tb.format_exception(type, value, traceback))
+        try:
+            platform.window.console.error(f"Python Error:\n{err_msg}")
+        except Exception:
+            pass
+        sys.__excepthook__(type, value, traceback)
+    sys.excepthook = custom_excepthook
 
 from process import (
     close,
