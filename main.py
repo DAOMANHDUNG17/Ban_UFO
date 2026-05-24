@@ -142,24 +142,70 @@ async def main():
                 if select_load == 3: # 'Back' button in load menu
                     continue
                 
-                if select_load == 1: # Previous Level
+                if select_load == 1: # Previous Level (bắt đầu ván mới)
                     await fade_out(screen)
+                    run_earned = 0
+                    run_ultimate = 0
+                    run_gift_rays = 0
                     while True:
-                        if not await loop_playing(screen, r_file()): break
+                        cont, run_earned, run_ultimate, run_gift_rays = await loop_playing(
+                            screen, r_file(),
+                            run_earned_motors=run_earned,
+                            ultimate_energy=run_ultimate,
+                            gift_rays=run_gift_rays
+                        )
+                        if not cont:
+                            current = r_file()
+                            if len(current) > 9:
+                                current[9] += run_earned
+                            w_file(*current)
+                            break
                         await asyncio.sleep(0)
-                else: # New Game (select_load == 2)
+                else: # New Game
                     prev = r_file()
                     sk = prev[7] if len(prev) > 7 else 0
-                    w_file(1, 1, 0, 5, 0, difficulty, 0, sk, starting_ammo(difficulty))
+                    motors = prev[9] if len(prev) > 9 else 0
+                    u1 = prev[10] if len(prev) > 10 else 0
+                    u2 = prev[11] if len(prev) > 11 else 0
+                    u3 = prev[12] if len(prev) > 12 else 0
+                    w_file(1, 1, 0, 5, 0, difficulty, 0, sk, starting_ammo(difficulty), motors, u1, u2, u3)
                     await fade_out(screen)
+                    run_earned = 0
+                    run_ultimate = 0
+                    run_gift_rays = 0
                     while True:
-                        if not await loop_playing(screen, r_file()): break
+                        cont, run_earned, run_ultimate, run_gift_rays = await loop_playing(
+                            screen, r_file(),
+                            run_earned_motors=run_earned,
+                            ultimate_energy=run_ultimate,
+                            gift_rays=run_gift_rays
+                        )
+                        if not cont:
+                            current = r_file()
+                            if len(current) > 9:
+                                current[9] += run_earned
+                            w_file(*current)
+                            break
                         await asyncio.sleep(0)
             else:
                 await fade_out(screen)
                 w_file(1, 1, 0, 5, 0, difficulty, 0, 0, starting_ammo(difficulty))
+                run_earned = 0
+                run_ultimate = 0
+                run_gift_rays = 0
                 while True:
-                    if not await loop_playing(screen, r_file()): break
+                    cont, run_earned, run_ultimate, run_gift_rays = await loop_playing(
+                        screen, r_file(),
+                        run_earned_motors=run_earned,
+                        ultimate_energy=run_ultimate,
+                        gift_rays=run_gift_rays
+                    )
+                    if not cont:
+                        current = r_file()
+                        if len(current) > 9:
+                            current[9] += run_earned
+                        w_file(*current)
+                        break
                     await asyncio.sleep(0)
         elif select_start == 2:
             await show_popup(screen, 'HIGHSCORES', 'Top 10 điểm cao nhất sẽ được lưu lại!')

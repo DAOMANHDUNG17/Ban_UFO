@@ -7,26 +7,28 @@ import os
 import pygame
 import asyncio  # THÊM THƯ VIỆN NÀY DÀNH CHO WEB
 
-# --- HỆ THỐNG LÁ CHẮN BẢO VỆ ÂM THANH TRÊN WEB ---
+# --- ÂM THANH (hỗ trợ tốt hơn trên web pygbag) ---
 class DummySound:
     def play(self, *args, **kwargs): pass
     def set_volume(self, *args, **kwargs): pass
     def stop(self): pass
 
 def load_music(path, vol):
-    import sys
-    if sys.platform == 'emscripten':
-        return DummySound()
     try:
+        if not pygame.mixer.get_init():
+            pygame.mixer.pre_init(44100, -16, 2, 512)
+            pygame.mixer.init()
         sound = pygame.mixer.Sound(path)
         sound.set_volume(vol)
         return sound
-    except:
-        return DummySound() # Đánh lừa trình duyệt nếu không đọc được đuôi .wav
+    except Exception as e:
+        print(f"[SOUND] Không load được {path}: {e}")
+        return DummySound()
 
 # =================================================
 
 def create_game(name):
+    pygame.mixer.pre_init(44100, -16, 2, 512)
     pygame.init()
     screen = pygame.display.set_mode((1366, 768))
     pygame.display.set_caption(name)
@@ -44,7 +46,12 @@ def create_game(name):
     except Exception as e:
         print(f"Icon load skipped: {e}")
 
-    load_music(all_music()['bg'], 0.2).play(-1)
+    # Bắt đầu nhạc nền (trên web có thể bị chặn cho đến khi người dùng click lần đầu)
+    bg = load_music(all_music()['bg'], 0.25)
+    try:
+        bg.play(-1)
+    except:
+        pass
     return screen
 
 
@@ -89,7 +96,7 @@ async def create_menu(screen, menu, highlight_color=(255, 215, 0), shadow=False)
     signal = text('>>>', 50, 'White')
     fps = pygame.time.Clock()
     select = 1
-    click_sound = load_music(all_music()['shoot'], 0.1) # Dùng lá chắn âm thanh
+    click_sound = load_music(all_music()['shoot'], 0.35)
     
     while True:
         fps.tick(30)
@@ -509,9 +516,6 @@ def screen_playing(screen, obj, pl_inf, ck_inf, egg_inf, ls_inf, score_inf, gift
     screen.blit(text(f"Động cơ (Tổng): {feathers}", 30, (255, 215, 0)), (50, 265))
 
     py_y = 305
-    if gift_rays_timer > 0:
-        screen.blit(text(f"Tăng tia: {gift_rays_timer//60}s", 30, 'Cyan'), (50, py_y))
-        py_y += 35
     if shield_timer > 0:
         screen.blit(text(f"Bất tử: {shield_timer//60}s", 30, (100, 200, 255)), (50, py_y))
         py_y += 35
@@ -802,7 +806,7 @@ def find_best_target(player_pos, ck_inf, boss_mode, boss_pos, boss_img=None):
     return closest_chicken
 
 
-async def loop_playing(screen, load_inf=None, difficulty=None):
+async def loop_playing(screen, load_inf=None, difficulty=None, run_earned_motors=None, ultimate_energy=None, gift_rays=None):
     load = load_inf
     if load is None:
         prev = r_file()
@@ -824,6 +828,13 @@ async def loop_playing(screen, load_inf=None, difficulty=None):
     
     (lv_game, lv_gun, score, hp, gift_rays, diff_saved, old_missiles,
      skin_index, ammo, motors_collected, u_speed, u_hp, u_missile) = load[:13]
+
+    # Clean per-match earnings (chỉ xu nhặt được trong ván này)
+    # Tuân thủ cấu trúc deploy: state run-time được truyền từ main.py session
+    if run_earned_motors is not None:
+        motors_collected = run_earned_motors
+    else:
+        motors_collected = 0  # an toàn cho trường hợp gọi cũ
 
     current_missiles_count = old_missiles
 
@@ -912,20 +923,21 @@ async def loop_playing(screen, load_inf=None, difficulty=None):
     invincibility_timer = 0
     level_up_msg_timer = 0
     muzzle_flash_timer = 0
-    ultimate_energy = 0
+    ultimate_energy = ultimate_energy if ultimate_energy is not None else 0
     ultimate_storm_timer = 0
     missile_timer = 0
     screen_shake = 0
     level_up_font = pygame.font.SysFont('Arial', 80, bold=True)
     
-    gift_rays_timer = 0
+    gift_rays = gift_rays if gift_rays is not None else 0
+    gift_rays_timer = 0  # vẫn giữ biến để không phá UI cũ, nhưng sẽ không dùng timer nữa
     shield_timer = 0
     shoot_cooldown = 0 
 
     # --- SỬ DỤNG LÁ CHẮN ÂM THANH TRONG LÚC CHƠI ---
-    laser_sound = load_music(music['shoot'], 0.05)
-    boom_sound = load_music(music['explode_ck'], 0.05)
-    collision_sound = load_music(music['collision'], 0.05)
+    laser_sound = load_music(music['shoot'], 0.28)
+    boom_sound = load_music(music['explode_ck'], 0.30)
+    collision_sound = load_music(music['collision'], 0.25)
 
     ramp = stage_ramp(lv_game)
     egg_ms = int(game[lv_game][shoot_time] * egg_interval_mult(difficulty) / ramp)
@@ -987,9 +999,7 @@ async def loop_playing(screen, load_inf=None, difficulty=None):
             screen_shake = random.randint(2, 6)
             if ultimate_storm_timer % 3 == 0:
                 create_laser(random.randint(2, 4), ls_inf, pl_inf, laser_sound, offset_x=random.randint(-200, 200))
-        if gift_rays_timer > 0:
-            gift_rays_timer -= 1
-            if gift_rays_timer == 0: gift_rays = 0
+        # gift_rays không còn dùng timer nữa (theo yêu cầu mới)
         
         if shield_timer > 0: shield_timer -= 1
         
@@ -1054,8 +1064,8 @@ async def loop_playing(screen, load_inf=None, difficulty=None):
                     if choose == 2: break
                     elif choose == 3:
                         current_missiles_count = 0
-                        w_file(1, 1, 0, 5, 0, difficulty, 0, skin_index, starting_ammo(difficulty), motors_collected, u_speed, u_hp, u_missile)
-                        return False
+                        w_file(1, 1, 0, 5, 0, difficulty, 0, skin_index, starting_ammo(difficulty), u_data[9], u_speed, u_hp, u_missile)
+                        return (False, motors_collected, ultimate_energy, gift_rays)
                 elif event.key == pygame.K_SPACE and ultimate_energy >= 100:
                     ultimate_energy = 0
                     ultimate_storm_timer = 240
@@ -1084,15 +1094,15 @@ async def loop_playing(screen, load_inf=None, difficulty=None):
 
             lv_game += 1
             ammo += (25 + lv_game * 5)
-            w_file(lv_game, lv_gun, score, hp, gift_rays, difficulty, current_missiles_count, skin_index, ammo, motors_collected, u_data[10], u_data[11], u_data[12])
-            return True
+            w_file(lv_game, lv_gun, score, hp, gift_rays, difficulty, current_missiles_count, skin_index, ammo, u_data[9], u_data[10], u_data[11], u_data[12])
+            return (True, motors_collected, ultimate_energy, gift_rays)
 
         if (not meteor_mode and count <= 0) or hp <= 0:
             screen_show_mess(screen, 'YOU LOSE')
             await asyncio.sleep(3)
             record_high_score(score)
-            w_file(1, 1, 0, 5, 0, 2, 0, skin_index, starting_ammo(2), motors_collected, u_data[10], u_data[11], u_data[12])
-            return
+            w_file(1, 1, 0, 5, 0, 2, 0, skin_index, starting_ammo(2), u_data[9], u_data[10], u_data[11], u_data[12])
+            return (False, motors_collected, ultimate_energy, gift_rays)
 
         if lv_gun < len(gun) - 1 and score >= gun[lv_gun][req_score_gun]:
             lv_gun += 1
@@ -1253,6 +1263,8 @@ async def loop_playing(screen, load_inf=None, difficulty=None):
             ammo = max(0, ammo - EGG_AMMO_LOSS)
             if invincibility_timer <= 0 and shield_timer <= 0:
                 hp -= 1
+                if gift_rays > 0:
+                    gift_rays -= 1
                 invincibility_timer = 60 
                 shake_timer = 10
                 particle_manager.emit(pl_inf['pos'][0], color=(255, 0, 0), count=15)
@@ -1269,6 +1281,8 @@ async def loop_playing(screen, load_inf=None, difficulty=None):
             ammo = max(0, ammo - BIG_EGG_AMMO_LOSS)
             if invincibility_timer <= 0 and shield_timer <= 0:
                 hp -= 2
+                if gift_rays > 0:
+                    gift_rays -= 1
                 invincibility_timer = 90
                 shake_timer = 15
                 particle_manager.emit(pl_inf['pos'][0], color=(255, 50, 0), count=20)
@@ -1288,8 +1302,7 @@ async def loop_playing(screen, load_inf=None, difficulty=None):
             gift_inf['pos'].pop(g_idx)
             gift_inf['types'].pop(g_idx)
             if g_type == 'rays':
-                gift_rays += 1
-                gift_rays_timer += 600
+                gift_rays = min(6, gift_rays + 1)  # permanent up to max 6
                 particle_manager.emit(pl_inf['pos'][0], color=(0, 255, 255), count=15)
             elif g_type == 'shield':
                 shield_timer += 480
@@ -1326,18 +1339,18 @@ async def loop_playing(screen, load_inf=None, difficulty=None):
 
         if hp <= 0:
             current_missiles_count = 0
-            w_file(1, 1, 0, 5, 0, difficulty, 0, skin_index, starting_ammo(difficulty), motors_collected, u_data[10], u_data[11], u_data[12])
+            w_file(1, 1, 0, 5, 0, difficulty, 0, skin_index, starting_ammo(difficulty), u_data[9], u_data[10], u_data[11], u_data[12])
             screen_show_mess(screen, 'GAME OVER - Tên lửa đuổi trận sau sẽ tính lại')
             await asyncio.sleep(2)
-            return False 
+            return (False, motors_collected, ultimate_energy, gift_rays)
 
         await asyncio.sleep(0) 
 
     if load[0] < len(game):
-        return True 
+        return (True, motors_collected, ultimate_energy, gift_rays) 
     else:
         screen_show_mess(screen, 'YOU WIN! Chúc mừng bạn đã hoàn thành game!')
         await asyncio.sleep(3)
         record_high_score(score)
-        w_file(1, 1, 0, 5, 0, 2, 0, skin_index, starting_ammo(2), motors_collected, u_data[10], u_data[11], u_data[12])
-    return False
+        w_file(1, 1, 0, 5, 0, 2, 0, skin_index, starting_ammo(2), u_data[9], u_data[10], u_data[11], u_data[12])
+        return (False, motors_collected, ultimate_energy, gift_rays)
