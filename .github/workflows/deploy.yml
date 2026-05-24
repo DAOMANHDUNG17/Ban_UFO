@@ -27,8 +27,7 @@ jobs:
 
       - name: Build Game using Pygbag
         run: |
-          # Lệnh dịch thư mục hiện tại ra định dạng Web
-          python -m pygbag --build .
+          # Lệnh dịch thư mục hiện tại ra định dạng Web và bỏ qua lỗi định dạng âm thanh wav
           python -m pygbag --build --disable-sound-format-error .
 
       - name: Deploy to GitHub Pages
