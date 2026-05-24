@@ -30,11 +30,19 @@ def create_game(name):
     pygame.init()
     screen = pygame.display.set_mode((1366, 768))
     pygame.display.set_caption(name)
-    icon_path = os.path.normpath(
-        os.path.join(os.path.dirname(save_file_path()), '..', 'image', 'chicken.png')
-    )
-    if os.path.isfile(icon_path):
-        pygame.display.set_icon(pygame.image.load(icon_path).convert_alpha())
+    try:
+        icon_path = os.path.normpath(
+            os.path.join(os.path.dirname(save_file_path()), '..', 'image', 'chicken.png')
+        )
+        if os.path.isfile(icon_path):
+            icon = pygame.image.load(icon_path)
+            try:
+                icon = icon.convert_alpha()
+            except Exception:
+                pass
+            pygame.display.set_icon(icon)
+    except Exception as e:
+        print(f"Icon load skipped: {e}")
 
     load_music(all_music()['bg'], 0.2).play(-1)
     return screen
@@ -296,7 +304,10 @@ def missile_weapon_inf():
     pygame.draw.polygon(s, (255, 200, 80), [(13, 0), (26, 36), (0, 36)])
     pygame.draw.circle(s, (255, 90, 40), (13, 14), 6)
     pygame.draw.polygon(s, (255, 240, 200), [(13, 4), (18, 14), (8, 14)])
-    img = s.convert_alpha()
+    try:
+        img = s.convert_alpha()
+    except Exception:
+        img = s
     return {'img': img, 'rect': img.get_rect(), 'items': []}
 
 def nearest_chicken_center(mx, my, ck_inf):
@@ -844,9 +855,12 @@ async def loop_playing(screen, load_inf=None, difficulty=None):
     screen_show_mess(screen, msg)
     await asyncio.sleep(2)
 
+    print(f"[GAME] Init start lv={lv_game} boss={boss_mode} meteor={meteor_mode}")
     fps = pygame.time.Clock()
     Max = screen.get_size()
     music = all_music()
+
+    await asyncio.sleep(0)  # Yield cho trình duyệt
 
     pl_inf = player_inf(skin_index)
     ck_inf = chicken_inf()
@@ -858,6 +872,9 @@ async def loop_playing(screen, load_inf=None, difficulty=None):
     gift_inf['types'] = []
     missile_inf = missile_weapon_inf()
     
+    await asyncio.sleep(0)  # Yield cho trình duyệt sau khi tạo sprites
+    print("[GAME] Sprites created")
+
     missiles = load[6] if 'load' in locals() else 0
     boss_hp = 0
     boss_max_hp = 0
@@ -884,6 +901,9 @@ async def loop_playing(screen, load_inf=None, difficulty=None):
     
     player_target_pos = list(pl_inf['pos'][0])
     player_current_pos = list(pl_inf['pos'][0])
+
+    await asyncio.sleep(0)  # Yield cho trình duyệt sau khi tạo level
+    print("[GAME] Level objects created")
     
     u_data = r_file()
     stats = get_stat_bonus(u_data[10], u_data[11], u_data[12])
@@ -910,12 +930,15 @@ async def loop_playing(screen, load_inf=None, difficulty=None):
     ramp = stage_ramp(lv_game)
     egg_ms = int(game[lv_game][shoot_time] * egg_interval_mult(difficulty) / ramp)
 
-    if boss_mode: egg_ms = max(180, egg_ms // 1.5)
-    elif meteor_mode: egg_ms = max(200, egg_ms // 2)
+    if boss_mode: egg_ms = max(180, int(egg_ms / 1.5))
+    elif meteor_mode: egg_ms = max(200, int(egg_ms / 2))
     else: egg_ms = max(160, egg_ms)
 
-    egg_speed = add_event(1, int(egg_ms))
-    countdown = add_event(2, 1000)
+    # Dùng frame counter thay vì pygame.time.set_timer (tương thích web hơn)
+    _egg_frame_interval = max(1, int(egg_ms / 16.67))  # Chuyển ms sang số frame (60fps)
+    _countdown_frame_interval = 60  # 1 giây = 60 frames
+    _egg_frame_counter = 0
+    _countdown_frame_counter = 0
     count = max(5, int(game[lv_game][max_time] * count_mult(difficulty) / ramp))
     if boss_mode: count = max(count, 48 + lv_game * 4)
 
@@ -929,6 +952,9 @@ async def loop_playing(screen, load_inf=None, difficulty=None):
     
     gifts_spawned_stage = 0
     hit_bursts = []
+
+    await asyncio.sleep(0)  # Yield cho trình duyệt trước khi bắt đầu vòng lặp
+    print("[GAME] Starting game loop")
 
     def rays_this_shot():
         base = gun[lv_gun][ray_gun]
@@ -991,19 +1017,27 @@ async def loop_playing(screen, load_inf=None, difficulty=None):
         
         if shoot_cooldown > 0: shoot_cooldown -= 1
 
+        # Frame-based timer thay cho USEREVENT (tương thích web)
+        _egg_frame_counter += 1
+        _countdown_frame_counter += 1
+
+        if _egg_frame_counter >= _egg_frame_interval:
+            _egg_frame_counter = 0
+            if meteor_mode:
+                for _ in range(random.randint(1, 2)):
+                    bx = random.choice([random.randint(0, Max[0]), -50, Max[0] + 50])
+                    by = random.randint(-150, -50)
+                    big_egg_inf['pos'].append((bx, by))
+                    big_egg_inf['direct'].append(bx > Max[0] // 2)
+            else:
+                create_egg(lv_game, egg_inf, ck_inf, boss_mode, tuple(boss_pos) if boss_mode else None, big_egg_inf)
+
+        if _countdown_frame_counter >= _countdown_frame_interval:
+            _countdown_frame_counter = 0
+            count -= 1
+
         for event in pygame.event.get():
             if event.type == pygame.QUIT: close()
-            elif event.type == egg_speed:
-                if meteor_mode:
-                    for _ in range(random.randint(1, 2)):
-                        bx = random.choice([random.randint(0, Max[0]), -50, Max[0] + 50])
-                        by = random.randint(-150, -50)
-                        big_egg_inf['pos'].append((bx, by))
-                        big_egg_inf['direct'].append(bx > Max[0] // 2)
-                else:
-                    create_egg(lv_game, egg_inf, ck_inf, boss_mode, tuple(boss_pos) if boss_mode else None, big_egg_inf)
-            elif event.type == countdown:
-                count -= 1
             if event.type == pygame.MOUSEBUTTONDOWN:
                 if event.button == 3: 
                     if current_missiles_count > 0:
@@ -1056,8 +1090,6 @@ async def loop_playing(screen, load_inf=None, difficulty=None):
         if (not meteor_mode and count <= 0) or hp <= 0:
             screen_show_mess(screen, 'YOU LOSE')
             await asyncio.sleep(3)
-            pygame.time.set_timer(egg_speed, 0)
-            pygame.time.set_timer(countdown, 0)
             record_high_score(score)
             w_file(1, 1, 0, 5, 0, 2, 0, skin_index, starting_ammo(2), motors_collected, u_data[10], u_data[11], u_data[12])
             return
@@ -1304,8 +1336,6 @@ async def loop_playing(screen, load_inf=None, difficulty=None):
     if load[0] < len(game):
         return True 
     else:
-        pygame.time.set_timer(egg_speed, 0)
-        pygame.time.set_timer(countdown, 0)
         screen_show_mess(screen, 'YOU WIN! Chúc mừng bạn đã hoàn thành game!')
         await asyncio.sleep(3)
         record_high_score(score)
