@@ -29,6 +29,7 @@ jobs:
         run: |
           # Lệnh dịch thư mục hiện tại ra định dạng Web
           python -m pygbag --build .
+          python -m pygbag --build --disable-sound-format-error .
 
       - name: Deploy to GitHub Pages
         uses: JamesIves/github-pages-deploy-action@v4
